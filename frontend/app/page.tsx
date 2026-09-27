@@ -1,60 +1,105 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { HomePanel } from "./components/dashboard/HomePanel";
+import { questions } from "./components/dashboard/data/mockData";
+import { LecturesPanel } from "./components/dashboard/LecturesPanel";
+import { LessonPanel } from "./components/dashboard/LessonPanel";
+import { QuizPanel } from "./components/dashboard/QuizPanel";
+import { Sidebar } from "./components/dashboard/Sidebar";
+import { ChooseInstructor } from "./components/onboarding/ChooseInstructor";
+import type {
+  Question,
+  QuizCategory,
+  Tab,
+} from "./components/dashboard/data/types";
 
-type Course = { id: number; name: string; category: string; duration_hours: number; status: string };
-
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-export default function Dashboard() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [apiStatus, setApiStatus] = useState("Checking API");
-
-  useEffect(() => {
-    fetch(`${apiUrl}/api/courses`)
-      .then((response) => {
-        if (!response.ok) throw new Error("API unavailable");
-        return response.json();
-      })
-      .then((data: Course[]) => {
-        setCourses(data);
-        setApiStatus("Live");
-      })
-      .catch(() => setApiStatus("Offline"));
-  }, []);
-
-  return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">R</span><span>roadwise</span></div>
-        <div className="workspace-label">Operations</div>
-        <nav>
-          <a className="nav-item active" href="#overview"><span>◈</span> Overview</a>
-          <a className="nav-item" href="#students"><span>◌</span> Students <b>24</b></a>
-          <a className="nav-item" href="#schedule"><span>◷</span> Schedule</a>
-          <a className="nav-item" href="#instructors"><span>♙</span> Instructors</a>
-          <a className="nav-item" href="#courses"><span>▣</span> Courses</a>
-        </nav>
-        <div className="sidebar-footer"><div className="avatar">AM</div><div><strong>Alex Morgan</strong><small>Administrator</small></div><span>•••</span></div>
-      </aside>
-
-      <section className="content" id="overview">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> Overview</div><div className="top-actions"><button className="icon-button" aria-label="Notifications">♧</button><div className="date-pill">September 25, 2026 <span>⌄</span></div></div></header>
-        <div className="page-heading"><div><p className="eyebrow">Friday, September 25, 2026</p><h1>Good morning, Alex.</h1><p className="subheading">Here&apos;s what&apos;s happening across your school today.</p></div><button className="primary-button">+ Add student</button></div>
-
-        <div className="stats-grid">
-          <article className="stat-card"><div className="stat-top"><span>Active students</span><span className="stat-icon mint">◌</span></div><strong>24</strong><small className="positive">↗ 12.5% <em>vs last month</em></small></article>
-          <article className="stat-card"><div className="stat-top"><span>Lessons today</span><span className="stat-icon peach">◷</span></div><strong>18</strong><small className="neutral">6 remaining <em>of 24 scheduled</em></small></article>
-          <article className="stat-card"><div className="stat-top"><span>Hours this month</span><span className="stat-icon blue">◒</span></div><strong>186.5</strong><small className="positive">↗ 8.2% <em>vs last month</em></small></article>
-          <article className="stat-card"><div className="stat-top"><span>Completion rate</span><span className="stat-icon yellow">✦</span></div><strong>87.4%</strong><small className="positive">↗ 3.1% <em>vs last month</em></small></article>
-        </div>
-
-        <div className="section-grid"><section className="panel schedule-panel"><div className="panel-heading"><div><h2>Today&apos;s schedule</h2><p>Friday, September 25</p></div><button className="text-button">View calendar →</button></div><div className="schedule-list"><Schedule time="09:00" name="Liam Johnson" detail="Practical lesson · B Licence" color="mint" /><Schedule time="10:30" name="Maya Patel" detail="Theory class · Module 4" color="peach" /><Schedule time="13:00" name="Noah Williams" detail="Practical lesson · B Licence" color="blue" /></div></section><section className="panel progress-panel"><div className="panel-heading"><div><h2>Course overview</h2><p>Enrollment by category</p></div><span className="live-dot">● {apiStatus}</span></div>{courses.length ? courses.map((course) => <div className="course-row" key={course.id}><div className="course-title"><span>{course.category}</span><strong>{course.name}</strong></div><div className="progress-track"><i style={{ width: `${Math.min(course.duration_hours * 2, 100)}%` }} /></div><small>{course.duration_hours} hrs</small></div>) : <div className="loading">Loading courses...</div>}<button className="outline-button">Manage courses</button></section></div>
-      </section>
-    </main>
-  );
+function shuffle<T>(items: T[]) {
+  return [...items].sort(() => Math.random() - 0.5);
 }
 
-function Schedule({ time, name, detail, color }: { time: string; name: string; detail: string; color: string }) {
-  return <div className="schedule-row"><time>{time}</time><span className={`timeline-dot ${color}`} /><div><strong>{name}</strong><p>{detail}</p></div><button className="more-button" aria-label={`More options for ${name}`}>•••</button></div>;
+export default function Dashboard() {
+  const [assignedInstructorId, setAssignedInstructorId] = useState<
+    number | null
+  >(null);
+  const [tab, setTab] = useState<Tab>("home");
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [requestSent, setRequestSent] = useState(false);
+  const [quizCategory, setQuizCategory] = useState<QuizCategory | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [quizDone, setQuizDone] = useState(false);
+  const score = answers.filter(
+    (answer, index) => answer === quizQuestions[index]?.answer,
+  ).length;
+
+  if (assignedInstructorId === null) {
+    return <ChooseInstructor onAssign={setAssignedInstructorId} />;
+  }
+
+  function startQuiz(category: QuizCategory) {
+    const selected =
+      category === "final"
+        ? ["theory", "signs", "intersections"].flatMap((key) =>
+            shuffle(
+              questions.filter((question) => question.category === key),
+            ).slice(0, key === "theory" ? 20 : key === "signs" ? 10 : 4),
+          )
+        : shuffle(
+            questions.filter((question) => question.category === category),
+          ).slice(0, 10);
+    setQuizCategory(category);
+    setQuizQuestions(selected);
+    setQuizIndex(0);
+    setAnswers([]);
+    setQuizDone(false);
+  }
+
+  function chooseAnswer(answer: number) {
+    const nextAnswers = [...answers];
+    nextAnswers[quizIndex] = answer;
+    setAnswers(nextAnswers);
+    if (quizIndex === quizQuestions.length - 1) setQuizDone(true);
+    else setQuizIndex((current) => current + 1);
+  }
+
+  return (
+    <main className="min-h-screen bg-background font-sans text-text">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <Sidebar tab={tab} onTabChange={setTab} />
+        <section className="w-full lg:ml-64">
+          <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
+            {tab === "home" && <HomePanel onTabChange={setTab} />}
+            {tab === "lessons" && (
+              <LessonPanel
+                instructorId={assignedInstructorId}
+                selectedSlot={selectedSlot}
+                requestSent={requestSent}
+                onSlotChange={setSelectedSlot}
+                onRequest={() => setRequestSent(true)}
+              />
+            )}
+            {tab === "quiz" && (
+              <QuizPanel
+                category={quizCategory}
+                questions={quizQuestions}
+                index={quizIndex}
+                answers={answers}
+                done={quizDone}
+                score={score}
+                onStart={startQuiz}
+                onAnswer={chooseAnswer}
+                onReset={() => {
+                  setQuizCategory(null);
+                  setQuizDone(false);
+                }}
+              />
+            )}
+            {tab === "lectures" && <LecturesPanel />}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }
