@@ -16,6 +16,15 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000). The API is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+The backend seeds an admin account on first startup:
+
+- Email: `admin@roadwise.local`
+- Password: `Roadwise123!`
+
+Students can create accounts from the login screen, request lessons from the
+instructor availability returned by the API, and see their persisted booking
+status after signing in again.
+
 To stop the stack:
 
 ```bash

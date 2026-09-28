@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HomePanel } from "./components/dashboard/HomePanel";
 import { questions } from "./components/dashboard/data/mockData";
 import { LecturesPanel } from "./components/dashboard/LecturesPanel";
@@ -8,6 +8,7 @@ import { LessonPanel } from "./components/dashboard/LessonPanel";
 import { QuizPanel } from "./components/dashboard/QuizPanel";
 import { Sidebar } from "./components/dashboard/Sidebar";
 import { ChooseInstructor } from "./components/onboarding/ChooseInstructor";
+import { createBooking, getInstructors, getMyBookings, type ApiInstructor } from "./lib/api";
 import type {
   Question,
   QuizCategory,
@@ -19,12 +20,14 @@ function shuffle<T>(items: T[]) {
 }
 
 export default function Dashboard() {
+  const [instructors, setInstructors] = useState<ApiInstructor[]>([]);
   const [assignedInstructorId, setAssignedInstructorId] = useState<
     number | null
   >(null);
   const [tab, setTab] = useState<Tab>("home");
   const [selectedSlot, setSelectedSlot] = useState("");
   const [requestSent, setRequestSent] = useState(false);
+  const [requestError, setRequestError] = useState("");
   const [quizCategory, setQuizCategory] = useState<QuizCategory | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -34,8 +37,25 @@ export default function Dashboard() {
     (answer, index) => answer === quizQuestions[index]?.answer,
   ).length;
 
+  useEffect(() => {
+    Promise.all([getInstructors(), getMyBookings()])
+      .then(([availableInstructors, bookings]) => {
+        setInstructors(availableInstructors);
+        const latestBooking = bookings[0];
+        if (latestBooking) {
+          setAssignedInstructorId(latestBooking.instructor_id);
+          setSelectedSlot(latestBooking.slot);
+          setRequestSent(true);
+        }
+      })
+      .catch(() => setRequestError("We could not load your booking details."));
+  }, []);
+
   if (assignedInstructorId === null) {
-    return <ChooseInstructor onAssign={setAssignedInstructorId} />;
+    if (instructors.length === 0) {
+      return <main className="grid min-h-screen place-items-center bg-background text-sm text-text-secondary">Loading instructors...</main>;
+    }
+    return <ChooseInstructor instructors={instructors} onAssign={setAssignedInstructorId} />;
   }
 
   function startQuiz(category: QuizCategory) {
@@ -73,11 +93,21 @@ export default function Dashboard() {
             {tab === "home" && <HomePanel onTabChange={setTab} />}
             {tab === "lessons" && (
               <LessonPanel
+                instructors={instructors}
                 instructorId={assignedInstructorId}
                 selectedSlot={selectedSlot}
                 requestSent={requestSent}
+                requestError={requestError}
                 onSlotChange={setSelectedSlot}
-                onRequest={() => setRequestSent(true)}
+                onRequest={async () => {
+                  setRequestError("");
+                  try {
+                    await createBooking(assignedInstructorId, selectedSlot);
+                    setRequestSent(true);
+                  } catch (error) {
+                    setRequestError(error instanceof Error ? error.message : "Unable to send booking request");
+                  }
+                }}
               />
             )}
             {tab === "quiz" && (

@@ -1,20 +1,23 @@
 "use client";
 
 import type { Instructor } from "./data/types";
-import { instructors } from "./data/mockData";
 
 type LessonPanelProps = {
+  instructors: Instructor[];
   instructorId: number;
   selectedSlot: string;
   requestSent: boolean;
+  requestError: string;
   onSlotChange: (slot: string) => void;
   onRequest: () => void;
 };
 
 export function LessonPanel({
+  instructors,
   instructorId,
   selectedSlot,
   requestSent,
+  requestError,
   onSlotChange,
   onRequest,
 }: LessonPanelProps) {
@@ -85,6 +88,12 @@ export function LessonPanel({
               Request sent. Jamie will review it soon.
             </div>
           ) : (
+            <>
+              {requestError && (
+                <p className="mt-6 rounded-md bg-error/10 p-4 text-xs font-bold text-error">
+                  {requestError}
+                </p>
+              )}
             <button
               className="mt-6 w-full rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
@@ -93,6 +102,7 @@ export function LessonPanel({
             >
               Send booking request
             </button>
+            </>
           )}
         </section>
       </div>

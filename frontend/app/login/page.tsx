@@ -2,19 +2,34 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { authenticate } from "../lib/api";
 
 export default function Login() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: any) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    document.cookie =
-      "roadwise_session=active; path=/; max-age=86400; samesite=lax";
-    const requestedPath = new URLSearchParams(window.location.search).get(
-      "next",
-    );
-    router.replace(requestedPath?.startsWith("/") ? requestedPath : "/");
+    setError("");
+    setSubmitting(true);
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      const response = await authenticate(
+        isSignUp ? "/api/auth/signup" : "/api/auth/login",
+        values as Record<string, string>,
+      );
+      localStorage.setItem("roadwise_token", response.token);
+      document.cookie = `roadwise_session=${response.token}; path=/; max-age=86400; samesite=lax`;
+      const requestedPath = new URLSearchParams(window.location.search).get("next");
+      const defaultPath = response.user.role === "admin" ? "/instructor" : "/";
+      router.replace(requestedPath?.startsWith("/") ? requestedPath : defaultPath);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to sign in");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -63,6 +78,11 @@ export default function Login() {
                 : "Your school dashboard is waiting."}
             </p>
           </div>
+          {error && (
+            <p className="mb-5 rounded-md bg-error/10 p-3 text-xs font-bold text-error">
+              {error}
+            </p>
+          )}
           <form className="grid gap-5" onSubmit={handleSubmit}>
             {isSignUp && (
               <label className="grid gap-2 text-xs font-bold">
@@ -106,8 +126,9 @@ export default function Login() {
             <button
               className="rounded-md cursor-pointer bg-primary px-4 py-3.5 text-xs font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-[#3730a3]"
               type="submit"
+              disabled={submitting}
             >
-              {isSignUp ? "Create account" : "Sign in"}
+              {submitting ? "Connecting..." : isSignUp ? "Create account" : "Sign in"}
             </button>
           </form>
           <p className="mt-7 text-center text-xs text-text-secondary">

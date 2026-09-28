@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { instructors } from "../dashboard/data/mockData";
+import type { Instructor } from "../dashboard/data/types";
 
 export function ChooseInstructor({
+  instructors,
   onAssign,
 }: {
+  instructors: Instructor[];
   onAssign: (instructorId: number) => void;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
