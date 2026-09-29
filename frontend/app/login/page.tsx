@@ -23,7 +23,7 @@ export default function Login() {
       localStorage.setItem("roadwise_token", response.token);
       document.cookie = `roadwise_session=${response.token}; path=/; max-age=86400; samesite=lax`;
       const requestedPath = new URLSearchParams(window.location.search).get("next");
-      const defaultPath = response.user.role === "admin" ? "/instructor" : "/";
+      const defaultPath = response.user.role === "admin" ? "/admin" : response.user.role === "instructor" ? "/instructor" : "/";
       router.replace(requestedPath?.startsWith("/") ? requestedPath : defaultPath);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to sign in");

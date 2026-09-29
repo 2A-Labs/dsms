@@ -10,15 +10,19 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, User
+from app.models import Booking, Course, SchoolSettings, User
 from app.schemas import (
     AuthResponse,
     BookingCreate,
     BookingResponse,
     CourseResponse,
     Credentials,
+    InstructorCreate,
     InstructorResponse,
+    InstructorUpdate,
     SignUpRequest,
+    SchoolSettingsResponse,
+    SchoolSettingsUpdate,
     UserResponse,
 )
 
@@ -64,6 +68,8 @@ async def lifespan(_: FastAPI):
                     role="admin",
                 )
             )
+        if session.scalar(select(SchoolSettings.id).limit(1)) is None:
+            session.add(SchoolSettings())
         if session.scalar(select(User.id).where(User.role == "instructor")) is None:
             session.add_all(
                 [
@@ -105,6 +111,19 @@ def current_user(token: str, db: Session) -> User:
     return user
 
 
+def authenticated_user(authorization: str | None, db: Session) -> User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing session token")
+    return current_user(authorization[7:], db)
+
+
+def admin_user(authorization: str | None, db: Session) -> User:
+    user = authenticated_user(authorization, db)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage school settings")
+    return user
+
+
 @app.post("/api/auth/signup", response_model=AuthResponse)
 def signup(payload: SignUpRequest, db: Session = Depends(get_db)) -> AuthResponse:
     email = payload.email.strip().lower()
@@ -131,9 +150,125 @@ def login(payload: Credentials, db: Session = Depends(get_db)) -> AuthResponse:
 
 @app.get("/api/auth/me", response_model=UserResponse)
 def me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> UserResponse:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing session token")
-    return current_user(authorization[7:], db)
+    return authenticated_user(authorization, db)
+
+
+@app.get("/api/admin/settings", response_model=SchoolSettingsResponse)
+def get_school_settings(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> SchoolSettings:
+    admin_user(authorization, db)
+    settings = db.scalar(select(SchoolSettings).limit(1))
+    if settings is None:
+        settings = SchoolSettings()
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+@app.get("/api/settings", response_model=SchoolSettingsResponse)
+def public_school_settings(db: Session = Depends(get_db)) -> SchoolSettings:
+    settings = db.scalar(select(SchoolSettings).limit(1))
+    if settings is None:
+        settings = SchoolSettings()
+    return settings
+
+
+@app.put("/api/admin/settings", response_model=SchoolSettingsResponse)
+def update_school_settings(
+    payload: SchoolSettingsUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> SchoolSettings:
+    admin_user(authorization, db)
+    settings = db.scalar(select(SchoolSettings).limit(1))
+    if settings is None:
+        settings = SchoolSettings()
+        db.add(settings)
+    settings.school_name = payload.school_name.strip() or "Roadwise"
+    settings.logo_mark = payload.logo_mark.strip()[:2] or "R"
+    settings.primary_color = payload.primary_color
+    settings.accent_color = payload.accent_color
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+@app.get("/api/admin/instructors", response_model=list[UserResponse])
+def list_admin_instructors(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[User]:
+    admin_user(authorization, db)
+    return list(db.scalars(select(User).where(User.role == "instructor").order_by(User.id)))
+
+
+@app.post("/api/admin/instructors", response_model=UserResponse, status_code=201)
+def create_instructor(
+    payload: InstructorCreate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    admin_user(authorization, db)
+    email = payload.email.strip().lower()
+    if db.scalar(select(User.id).where(User.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="An account with that email already exists")
+    instructor = User(
+        name=payload.name.strip(),
+        email=email,
+        password_hash=hash_password(payload.password),
+        role="instructor",
+        school=payload.school,
+        location=payload.location,
+    )
+    db.add(instructor)
+    db.commit()
+    db.refresh(instructor)
+    return instructor
+
+
+@app.patch("/api/admin/instructors/{instructor_id}", response_model=UserResponse)
+def update_instructor(
+    instructor_id: int,
+    payload: InstructorUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    admin_user(authorization, db)
+    instructor = db.scalar(select(User).where(User.id == instructor_id, User.role == "instructor"))
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+    if payload.email is not None:
+        email = payload.email.strip().lower()
+        duplicate = db.scalar(select(User.id).where(User.email == email, User.id != instructor_id))
+        if duplicate is not None:
+            raise HTTPException(status_code=409, detail="An account with that email already exists")
+        instructor.email = email
+    if payload.name is not None:
+        instructor.name = payload.name.strip()
+    if payload.password:
+        instructor.password_hash = hash_password(payload.password)
+    if payload.school is not None:
+        instructor.school = payload.school
+    if payload.location is not None:
+        instructor.location = payload.location
+    db.commit()
+    db.refresh(instructor)
+    return instructor
+
+
+@app.delete("/api/admin/instructors/{instructor_id}", status_code=204)
+def delete_instructor(
+    instructor_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    admin_user(authorization, db)
+    instructor = db.scalar(select(User).where(User.id == instructor_id, User.role == "instructor"))
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+    db.delete(instructor)
+    db.commit()
 
 
 @app.get("/api/instructors", response_model=list[InstructorResponse])

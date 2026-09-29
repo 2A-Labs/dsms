@@ -6,6 +6,18 @@ export type ApiUser = {
   email: string;
   role: string;
   instructor_id: number | null;
+  school?: string | null;
+  location?: string | null;
+};
+
+export type AdminInstructor = ApiUser;
+
+export type SchoolSettings = {
+  id: number;
+  school_name: string;
+  logo_mark: string;
+  primary_color: string;
+  accent_color: string;
 };
 
 export type ApiInstructor = {
@@ -56,6 +68,48 @@ export async function authenticate(
 
 export function getInstructors(): Promise<ApiInstructor[]> {
   return request<ApiInstructor[]>("/api/instructors");
+}
+
+export function getAdminInstructors(): Promise<AdminInstructor[]> {
+  return request<AdminInstructor[]>("/api/admin/instructors");
+}
+
+export function getSchoolSettings(): Promise<SchoolSettings> {
+  return request<SchoolSettings>("/api/admin/settings");
+}
+
+export function saveSchoolSettings(settings: Omit<SchoolSettings, "id">): Promise<SchoolSettings> {
+  return request<SchoolSettings>("/api/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  });
+}
+
+export function createAdminInstructor(payload: {
+  name: string;
+  email: string;
+  password: string;
+  school: string;
+  location: string;
+}): Promise<AdminInstructor> {
+  return request<AdminInstructor>("/api/admin/instructors", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminInstructor(
+  id: number,
+  payload: Partial<{ name: string; email: string; password: string; school: string; location: string }>,
+): Promise<AdminInstructor> {
+  return request<AdminInstructor>(`/api/admin/instructors/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminInstructor(id: number): Promise<void> {
+  await request<unknown>(`/api/admin/instructors/${id}`, { method: "DELETE" });
 }
 
 export function getMyBookings(): Promise<ApiBooking[]> {

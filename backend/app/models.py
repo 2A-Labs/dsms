@@ -30,6 +30,16 @@ class User(Base):
     location: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
+class SchoolSettings(Base):
+    __tablename__ = "school_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    school_name: Mapped[str] = mapped_column(String(120), default="Roadwise")
+    logo_mark: Mapped[str] = mapped_column(String(8), default="R")
+    primary_color: Mapped[str] = mapped_column(String(7), default="#4f46e5")
+    accent_color: Mapped[str] = mapped_column(String(7), default="#e0e7ff")
+
+
 class Booking(Base):
     __tablename__ = "bookings"
     __table_args__ = (UniqueConstraint("instructor_id", "slot", name="uq_booking_instructor_slot"),)

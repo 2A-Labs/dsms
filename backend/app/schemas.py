@@ -28,6 +28,41 @@ class UserResponse(BaseModel):
     email: str
     role: str
     instructor_id: int | None
+    school: str | None = None
+    location: str | None = None
+
+
+class InstructorCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+    school: str | None = None
+    location: str | None = None
+
+
+class InstructorUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    password: str | None = None
+    school: str | None = None
+    location: str | None = None
+
+
+class SchoolSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    school_name: str
+    logo_mark: str
+    primary_color: str
+    accent_color: str
+
+
+class SchoolSettingsUpdate(BaseModel):
+    school_name: str
+    logo_mark: str
+    primary_color: str
+    accent_color: str
 
 
 class AuthResponse(BaseModel):

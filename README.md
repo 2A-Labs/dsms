@@ -21,6 +21,11 @@ The backend seeds an admin account on first startup:
 - Email: `admin@roadwise.local`
 - Password: `Roadwise123!`
 
+Sign in with that account to open the `/admin` workspace. Admins can update the
+school name, logo mark, and color scheme, and are the only role allowed to add,
+edit, or remove instructor accounts. Students and instructors cannot use the
+admin API even if they call it directly.
+
 Students can create accounts from the login screen, request lessons from the
 instructor availability returned by the API, and see their persisted booking
 status after signing in again.

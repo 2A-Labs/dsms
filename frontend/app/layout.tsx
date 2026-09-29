@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+import { BrandingShell } from "./BrandingShell";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,7 +16,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.className}>
-      <body>{children}</body>
+      <body><BrandingShell>{children}</BrandingShell></body>
     </html>
   );
 }
