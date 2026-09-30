@@ -81,9 +81,22 @@ class InstructorResponse(BaseModel):
     slots: list[str]
 
 
+class LectureResponse(BaseModel):
+    id: int
+    instructor_id: int
+    instructor_name: str
+    title: str
+    file_url: str
+    duration_seconds: int | None
+
+
 class BookingCreate(BaseModel):
     instructor_id: int
     slot: str
+
+
+class InstructorAssignment(BaseModel):
+    instructor_id: int
 
 
 class BookingResponse(BaseModel):

@@ -1,8 +1,11 @@
 import type { Tab } from "./data/types";
 
-type HomePanelProps = { onTabChange: (tab: Tab) => void };
+type HomePanelProps = {
+  studentName: string;
+  onTabChange: (tab: Tab) => void;
+};
 
-export function HomePanel({ onTabChange }: HomePanelProps) {
+export function HomePanel({ studentName, onTabChange }: HomePanelProps) {
   return (
     <>
       <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -11,7 +14,7 @@ export function HomePanel({ onTabChange }: HomePanelProps) {
             Sunday, 27 September 2026
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            Good morning, Alex.
+            Good morning, {studentName}.
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
             Keep your next milestone in sight.

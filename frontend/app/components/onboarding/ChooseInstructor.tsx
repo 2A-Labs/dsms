@@ -9,9 +9,11 @@ export function ChooseInstructor({
   onAssign,
 }: {
   instructors: Instructor[];
-  onAssign: (instructorId: number) => void;
+  onAssign: (instructorId: number) => Promise<void>;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const selectedInstructor = instructors.find(
     (instructor) => instructor.id === selectedId,
   );
@@ -19,7 +21,10 @@ export function ChooseInstructor({
   return (
     <main className="min-h-screen bg-background px-5 py-8 font-sans text-text sm:px-8 sm:py-12">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-center">
-        <BrandLogo className="mb-10 flex items-center gap-2.5 font-display text-xl font-bold" markClassName="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white" />
+        <BrandLogo
+          className="mb-10 flex items-center gap-2.5 font-display text-xl font-bold"
+          markClassName="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white"
+        />
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
             One-time setup
@@ -69,16 +74,32 @@ export function ChooseInstructor({
           })}
         </div>
         <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-border pt-6 sm:flex-row sm:items-center">
+          {error && <p className="text-xs font-bold text-error">{error}</p>}
           <p className="text-xs text-text-secondary">
             Selected instructor: {selectedInstructor?.name ?? "None yet"}
           </p>
           <button
             className="rounded-md bg-primary px-5 py-3 text-xs font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             type="button"
-            disabled={selectedId === null}
-            onClick={() => selectedId !== null && onAssign(selectedId)}
+            disabled={selectedId === null || submitting}
+            onClick={async () => {
+              if (selectedId === null) return;
+              setSubmitting(true);
+              setError("");
+              try {
+                await onAssign(selectedId);
+              } catch (requestError) {
+                setError(
+                  requestError instanceof Error
+                    ? requestError.message
+                    : "Unable to save your instructor",
+                );
+              } finally {
+                setSubmitting(false);
+              }
+            }}
           >
-            Continue to dashboard
+            {submitting ? "Saving..." : "Continue to dashboard"}
           </button>
         </div>
       </div>

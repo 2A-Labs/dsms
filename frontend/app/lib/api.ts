@@ -38,6 +38,15 @@ export type ApiBooking = {
   status: string;
 };
 
+export type ApiLecture = {
+  id: number;
+  instructor_id: number;
+  instructor_name: string;
+  title: string;
+  file_url: string;
+  duration_seconds: number | null;
+};
+
 export type ApiQuizAnswer = {
   id: number;
   answer_text: string;
@@ -100,6 +109,17 @@ export function getInstructors(): Promise<ApiInstructor[]> {
   return request<ApiInstructor[]>("/api/instructors");
 }
 
+export function getMe(): Promise<ApiUser> {
+  return request<ApiUser>("/api/me");
+}
+
+export function assignInstructor(instructorId: number): Promise<ApiUser> {
+  return request<ApiUser>("/api/me/instructor", {
+    method: "PUT",
+    body: JSON.stringify({ instructor_id: instructorId }),
+  });
+}
+
 export function getAdminInstructors(): Promise<AdminInstructor[]> {
   return request<AdminInstructor[]>("/api/admin/instructors");
 }
@@ -158,6 +178,10 @@ export async function deleteAdminInstructor(id: number): Promise<void> {
 
 export function getMyBookings(): Promise<ApiBooking[]> {
   return request<ApiBooking[]>("/api/bookings/me");
+}
+
+export function getMyLectures(): Promise<ApiLecture[]> {
+  return request<ApiLecture[]>("/api/lectures");
 }
 
 export function createBooking(

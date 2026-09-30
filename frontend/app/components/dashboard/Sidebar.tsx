@@ -1,18 +1,35 @@
 import type { Tab } from "./data/types";
 import { BrandLogo } from "../../BrandingShell";
 
-type SidebarProps = { tab: Tab; onTabChange: (tab: Tab) => void };
+type SidebarProps = {
+  tab: Tab;
+  studentName: string;
+  onTabChange: (tab: Tab) => void;
+};
 
-export function Sidebar({ tab, onTabChange }: SidebarProps) {
+export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
+  const initials = studentName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <aside className="w-full border-b border-border bg-surface px-5 py-5 lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
-      <a href="/"><BrandLogo className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight" markClassName="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white" /></a>
+      <a href="/">
+        <BrandLogo
+          className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight"
+          markClassName="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white"
+        />
+      </a>
       <div className="mt-10 flex items-center gap-3 border-b border-border pb-5">
         <span className="grid size-9 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">
-          AM
+          {initials}
         </span>
         <div>
-          <p className="text-xs font-bold">Alex Morgan</p>
+          <p className="text-xs font-bold">{studentName}</p>
           <p className="mt-0.5 text-[11px] text-text-secondary">Student</p>
         </div>
       </div>

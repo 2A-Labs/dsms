@@ -9,11 +9,15 @@ import { Sidebar } from "./components/dashboard/Sidebar";
 import { ChooseInstructor } from "./components/onboarding/ChooseInstructor";
 import {
   createBooking,
+  assignInstructor,
+  getMe,
   getInstructors,
   getMyBookings,
+  getMyLectures,
   getQuizQuestions,
   submitQuiz,
   type ApiInstructor,
+  type ApiLecture,
   type ApiQuizQuestion,
   type ApiQuizSubmission,
 } from "./lib/api";
@@ -34,23 +38,42 @@ export default function Dashboard() {
   const [quizResult, setQuizResult] = useState<ApiQuizSubmission | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [studentName, setStudentName] = useState("");
+  const [lectures, setLectures] = useState<ApiLecture[]>([]);
+  const [lecturesLoading, setLecturesLoading] = useState(true);
+  const [lecturesError, setLecturesError] = useState("");
 
   useEffect(() => {
-    Promise.all([getInstructors(), getMyBookings()])
-      .then(([availableInstructors, bookings]) => {
+    Promise.all([getInstructors(), getMe(), getMyBookings(), getMyLectures()])
+      .then(([availableInstructors, user, bookings, availableLectures]) => {
         setInstructors(availableInstructors);
+        setStudentName(user.name);
+        setLectures(availableLectures);
+        if (user.instructor_id !== null) {
+          setAssignedInstructorId(user.instructor_id);
+        }
         const latestBooking = bookings[0];
         if (latestBooking) {
-          setAssignedInstructorId(latestBooking.instructor_id);
           setSelectedSlot(latestBooking.slot);
           setRequestSent(true);
+          if (user.instructor_id === null) {
+            setAssignedInstructorId(latestBooking.instructor_id);
+          }
         }
       })
-      .catch(() => setRequestError("We could not load your booking details."));
+      .catch(() => {
+        setRequestError("We could not load your account details.");
+        setLecturesError("We could not load your video lectures.");
+      })
+      .finally(() => {
+        setLoading(false);
+        setLecturesLoading(false);
+      });
   }, []);
 
   if (assignedInstructorId === null) {
-    if (instructors.length === 0) {
+    if (loading) {
       return (
         <main className="grid min-h-screen place-items-center bg-background text-sm text-text-secondary">
           Loading instructors...
@@ -60,7 +83,10 @@ export default function Dashboard() {
     return (
       <ChooseInstructor
         instructors={instructors}
-        onAssign={setAssignedInstructorId}
+        onAssign={async (instructorId) => {
+          await assignInstructor(instructorId);
+          setAssignedInstructorId(instructorId);
+        }}
       />
     );
   }
@@ -111,10 +137,12 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-background font-sans text-text">
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <Sidebar tab={tab} onTabChange={setTab} />
+        <Sidebar tab={tab} studentName={studentName} onTabChange={setTab} />
         <section className="w-full lg:ml-64">
           <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
-            {tab === "home" && <HomePanel onTabChange={setTab} />}
+            {tab === "home" && (
+              <HomePanel studentName={studentName} onTabChange={setTab} />
+            )}
             {tab === "lessons" && (
               <LessonPanel
                 instructors={instructors}
@@ -154,7 +182,13 @@ export default function Dashboard() {
                 }}
               />
             )}
-            {tab === "lectures" && <LecturesPanel />}
+            {tab === "lectures" && (
+              <LecturesPanel
+                lectures={lectures}
+                loading={lecturesLoading}
+                error={lecturesError}
+              />
+            )}
           </div>
         </section>
       </div>

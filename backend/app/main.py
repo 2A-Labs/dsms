@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, QuizAnswer, QuizQuestion, SchoolSettings, User
+from app.models import Booking, Course, QuizAnswer, QuizQuestion, SchoolSettings, User, VideoInstruction
 from app.schemas import (
     AuthResponse,
     BookingCreate,
@@ -18,8 +18,10 @@ from app.schemas import (
     CourseResponse,
     Credentials,
     InstructorCreate,
+    InstructorAssignment,
     InstructorResponse,
     InstructorUpdate,
+    LectureResponse,
     SignUpRequest,
     SchoolSettingsResponse,
     SchoolSettingsUpdate,
@@ -248,6 +250,31 @@ def login(payload: Credentials, db: Session = Depends(get_db)) -> AuthResponse:
     return AuthResponse(token=user.session_token, user=user)
 
 
+@app.get("/api/me", response_model=UserResponse)
+def get_me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
+    return authenticated_user(authorization, db)
+
+
+@app.put("/api/me/instructor", response_model=UserResponse)
+def assign_instructor(
+    payload: InstructorAssignment,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    student = authenticated_user(authorization, db)
+    if student.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can choose an instructor")
+    if student.instructor_id is not None:
+        raise HTTPException(status_code=409, detail="An instructor has already been chosen")
+    instructor = db.scalar(select(User).where(User.id == payload.instructor_id, User.role == "instructor"))
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+    student.instructor_id = instructor.id
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 @app.get("/api/auth/me", response_model=UserResponse)
 def me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> UserResponse:
     return authenticated_user(authorization, db)
@@ -410,6 +437,36 @@ def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
     ]
 
 
+@app.get("/api/lectures", response_model=list[LectureResponse])
+def list_my_lectures(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[LectureResponse]:
+    student = authenticated_user(authorization, db)
+    if student.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view assigned lectures")
+    if student.instructor_id is None:
+        return []
+    instructor = db.scalar(select(User).where(User.id == student.instructor_id, User.role == "instructor"))
+    if instructor is None:
+        return []
+    lectures = db.scalars(
+        select(VideoInstruction)
+        .where(VideoInstruction.instructor_id == instructor.id)
+        .order_by(VideoInstruction.created_at.desc())
+    )
+    return [
+        LectureResponse(
+            id=lecture.id,
+            instructor_id=lecture.instructor_id,
+            instructor_name=instructor.name,
+            title=lecture.title,
+            file_url=lecture.file_url,
+            duration_seconds=lecture.duration_seconds,
+        )
+        for lecture in lectures
+    ]
+
+
 @app.post("/api/bookings", response_model=BookingResponse, status_code=201)
 def create_booking(
     payload: BookingCreate,
@@ -424,6 +481,8 @@ def create_booking(
     instructor = db.scalar(select(User).where(User.id == payload.instructor_id, User.role == "instructor"))
     if instructor is None or payload.slot not in INSTRUCTOR_SLOTS.get(instructor.name, []):
         raise HTTPException(status_code=400, detail="That instructor or time is not available")
+    if student.instructor_id != instructor.id:
+        raise HTTPException(status_code=403, detail="You can only request lessons from your chosen instructor")
     existing = db.scalar(select(Booking).where(Booking.instructor_id == instructor.id, Booking.slot == payload.slot, Booking.status != "Declined"))
     if existing is not None:
         raise HTTPException(status_code=409, detail="That time has already been requested")
