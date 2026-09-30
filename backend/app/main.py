@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, SchoolSettings, User
+from app.models import Booking, Course, QuizAnswer, QuizQuestion, SchoolSettings, User
 from app.schemas import (
     AuthResponse,
     BookingCreate,
@@ -23,6 +23,9 @@ from app.schemas import (
     SignUpRequest,
     SchoolSettingsResponse,
     SchoolSettingsUpdate,
+    QuizQuestionResponse,
+    QuizSubmissionRequest,
+    QuizSubmissionResponse,
     UserResponse,
 )
 
@@ -104,6 +107,101 @@ def health(db: Session = Depends(get_db)) -> dict[str, str]:
 @app.get("/api/courses", response_model=list[CourseResponse])
 def list_courses(db: Session = Depends(get_db)) -> list[Course]:
     return list(db.scalars(select(Course).order_by(Course.id)))
+
+
+def student_user(authorization: str | None, db: Session) -> User:
+    user = authenticated_user(authorization, db)
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can take quizzes")
+    return user
+
+
+@app.get("/api/quiz/questions", response_model=list[QuizQuestionResponse])
+def get_quiz_questions(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[QuizQuestionResponse]:
+    student_user(authorization, db)
+    questions = list(
+        db.scalars(
+            select(QuizQuestion)
+            .where(QuizQuestion.is_active.is_(True))
+            .order_by(func.random())
+            .limit(20)
+        )
+    )
+    if len(questions) < 20:
+        raise HTTPException(status_code=409, detail="At least 20 active quiz questions are required")
+
+    question_ids = [question.id for question in questions]
+    answers = list(
+        db.scalars(
+            select(QuizAnswer)
+            .where(QuizAnswer.question_id.in_(question_ids))
+            .order_by(QuizAnswer.id)
+        )
+    )
+    answers_by_question: dict[int, list[QuizAnswer]] = {question_id: [] for question_id in question_ids}
+    for answer in answers:
+        answers_by_question[answer.question_id].append(answer)
+    return [
+        QuizQuestionResponse(
+            id=question.id,
+            question_text=question.question_text,
+            answers=[
+                {"id": answer.id, "answer_text": answer.answer_text}
+                for answer in answers_by_question[question.id]
+            ],
+        )
+        for question in questions
+    ]
+
+
+@app.post("/api/quiz/submit", response_model=QuizSubmissionResponse)
+def submit_quiz(
+    payload: QuizSubmissionRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> QuizSubmissionResponse:
+    student_user(authorization, db)
+    if not payload.answers:
+        raise HTTPException(status_code=400, detail="At least one answer is required")
+
+    question_ids = [answer.question_id for answer in payload.answers]
+    if len(question_ids) != len(set(question_ids)):
+        raise HTTPException(status_code=400, detail="Each question can only be answered once")
+
+    questions = list(db.scalars(select(QuizQuestion).where(QuizQuestion.id.in_(question_ids))))
+    questions_by_id = {question.id: question for question in questions}
+    answers = list(db.scalars(select(QuizAnswer).where(QuizAnswer.question_id.in_(question_ids))))
+    answers_by_question: dict[int, list[QuizAnswer]] = {question_id: [] for question_id in question_ids}
+    for answer in answers:
+        answers_by_question[answer.question_id].append(answer)
+
+    review = []
+    for submitted in payload.answers:
+        question = questions_by_id.get(submitted.question_id)
+        if question is None:
+            raise HTTPException(status_code=400, detail="Quiz question not found")
+        question_answers = answers_by_question[question.id]
+        selected = next((answer for answer in question_answers if answer.id == submitted.answer_id), None)
+        correct = next((answer for answer in question_answers if answer.is_correct), None)
+        if correct is None:
+            raise HTTPException(status_code=409, detail="Every question must have one correct answer")
+        review.append(
+            {
+                "question_id": question.id,
+                "question_text": question.question_text,
+                "selected_answer": selected.answer_text if selected else None,
+                "correct_answer": correct.answer_text,
+                "is_correct": selected is not None and selected.is_correct,
+            }
+        )
+
+    return QuizSubmissionResponse(
+        score=sum(item["is_correct"] for item in review),
+        total=len(review),
+        review=review,
+    )
 
 
 def current_user(token: str, db: Session) -> User:

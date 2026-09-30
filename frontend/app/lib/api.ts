@@ -38,10 +38,38 @@ export type ApiBooking = {
   status: string;
 };
 
+export type ApiQuizAnswer = {
+  id: number;
+  answer_text: string;
+};
+
+export type ApiQuizQuestion = {
+  id: number;
+  question_text: string;
+  answers: ApiQuizAnswer[];
+};
+
+export type ApiQuizReviewItem = {
+  question_id: number;
+  question_text: string;
+  selected_answer: string | null;
+  correct_answer: string;
+  is_correct: boolean;
+};
+
+export type ApiQuizSubmission = {
+  score: number;
+  total: number;
+  review: ApiQuizReviewItem[];
+};
+
 type AuthResponse = { token: string; user: ApiUser };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window === "undefined" ? null : localStorage.getItem("roadwise_token");
+  const token =
+    typeof window === "undefined"
+      ? null
+      : localStorage.getItem("roadwise_token");
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -86,7 +114,9 @@ export function getSchoolSettings(): Promise<SchoolSettings> {
   return request<SchoolSettings>("/api/admin/settings");
 }
 
-export function saveSchoolSettings(settings: Omit<SchoolSettings, "id">): Promise<SchoolSettings> {
+export function saveSchoolSettings(
+  settings: Omit<SchoolSettings, "id">,
+): Promise<SchoolSettings> {
   return request<SchoolSettings>("/api/admin/settings", {
     method: "PUT",
     body: JSON.stringify(settings),
@@ -108,7 +138,13 @@ export function createAdminInstructor(payload: {
 
 export function updateAdminInstructor(
   id: number,
-  payload: Partial<{ name: string; email: string; password: string; school: string; location: string }>,
+  payload: Partial<{
+    name: string;
+    email: string;
+    password: string;
+    school: string;
+    location: string;
+  }>,
 ): Promise<AdminInstructor> {
   return request<AdminInstructor>(`/api/admin/instructors/${id}`, {
     method: "PATCH",
@@ -124,9 +160,25 @@ export function getMyBookings(): Promise<ApiBooking[]> {
   return request<ApiBooking[]>("/api/bookings/me");
 }
 
-export function createBooking(instructorId: number, slot: string): Promise<ApiBooking> {
+export function createBooking(
+  instructorId: number,
+  slot: string,
+): Promise<ApiBooking> {
   return request<ApiBooking>("/api/bookings", {
     method: "POST",
     body: JSON.stringify({ instructor_id: instructorId, slot }),
+  });
+}
+
+export function getQuizQuestions(): Promise<ApiQuizQuestion[]> {
+  return request<ApiQuizQuestion[]>("/api/quiz/questions");
+}
+
+export function submitQuiz(
+  answers: { question_id: number; answer_id: number }[],
+): Promise<ApiQuizSubmission> {
+  return request<ApiQuizSubmission>("/api/quiz/submit", {
+    method: "POST",
+    body: JSON.stringify({ answers }),
   });
 }

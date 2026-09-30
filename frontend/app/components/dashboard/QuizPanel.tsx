@@ -1,90 +1,77 @@
 "use client";
 
-import type { Question, QuizCategory } from "./data/types";
+import type { ApiQuizQuestion, ApiQuizSubmission } from "../../lib/api";
 
 type QuizPanelProps = {
-  category: QuizCategory | null;
-  questions: Question[];
+  questions: ApiQuizQuestion[];
   index: number;
-  answers: number[];
-  done: boolean;
-  score: number;
-  onStart: (category: QuizCategory) => void;
-  onAnswer: (answer: number) => void;
+  result: ApiQuizSubmission | null;
+  loading: boolean;
+  error: string;
+  onStart: () => void;
+  onAnswer: (answer: number) => void | Promise<void>;
   onReset: () => void;
 };
 
 export function QuizPanel({
-  category,
   questions,
   index,
-  answers,
-  done,
-  score,
+  result,
+  loading,
+  error,
   onStart,
   onAnswer,
   onReset,
 }: QuizPanelProps) {
-  if (!category)
+  if (!result && questions.length === 0) {
     return (
       <>
         <PageIntro
           eyebrow="Knowledge check"
           title="Practice with purpose"
-          text="Build confidence in the topics that matter on test day. Every quiz is a fresh set of questions."
+          text="Take a 20-question quiz selected at random from the questions in the database."
         />
-        <div className="grid gap-4 md:grid-cols-2">
-          {[
-            [
-              "Driving theory",
-              "10 questions · Road rules and safe driving",
-              "theory",
-            ],
-            ["Road signs", "10 questions · Signs and markings", "signs"],
-            [
-              "Intersections",
-              "10 questions · Junction awareness",
-              "intersections",
-            ],
-            [
-              "Final mock test",
-              "34 questions · 20 theory · 10 signs · 4 intersections",
-              "final",
-            ],
-          ].map(([title, detail, value], index) => (
-            <button
-              className={`rounded-lg border p-5 text-left transition hover:border-primary sm:p-7 ${value === "final" ? "border-primary bg-primary text-white" : "border-border bg-surface"}`}
-              type="button"
-              key={value}
-              onClick={() => onStart(value as QuizCategory)}
-            >
-              <span className="text-xs font-bold">
-                {value === "final" ? "★" : `0${index + 1}`}
-              </span>
-              <h2 className="mt-6 font-display text-xl font-semibold">
-                {title}
-              </h2>
-              <p className="mt-2 text-xs text-text-secondary">{detail}</p>
-              <span className="mt-6 block text-xs font-bold">Start quiz →</span>
-            </button>
-          ))}
-        </div>
+        {error && (
+          <p className="mb-4 text-sm font-bold text-red-600">{error}</p>
+        )}
+        <button
+          className="rounded-md bg-primary px-5 py-3 text-xs font-bold text-white disabled:opacity-50"
+          type="button"
+          onClick={onStart}
+          disabled={loading}
+        >
+          {loading ? "Loading questions..." : "Start quiz"}
+        </button>
       </>
     );
-  if (done)
+  }
+
+  if (result) return <QuizResults result={result} onReset={onReset} />;
+
+  if (error) {
     return (
-      <QuizResults
-        questions={questions}
-        answers={answers}
-        score={score}
-        onReset={onReset}
-      />
+      <>
+        <PageIntro
+          eyebrow="Quiz error"
+          title="We could not finish the quiz"
+          text={error}
+        />
+        <button
+          className="rounded-md bg-primary px-4 py-3 text-xs font-bold text-white"
+          type="button"
+          onClick={onReset}
+        >
+          Back to quiz
+        </button>
+      </>
     );
+  }
+
   const question = questions[index];
   return (
     <>
       <PageIntro
-        eyebrow={`${category} · Question ${index + 1} of ${questions.length}`}
+        eyebrow={`Question ${index + 1} of ${questions.length}`}
         title="Take your time"
         text="Choose the answer that feels safest. There is no time limit."
       />
@@ -96,17 +83,18 @@ export function QuizPanel({
           />
         </div>
         <h2 className="mt-8 font-display text-2xl font-semibold leading-tight">
-          {question.prompt}
+          {question.question_text}
         </h2>
         <div className="mt-7 grid gap-3">
-          {question.options.map((option, optionIndex) => (
+          {question.answers.map((answer, answerIndex) => (
             <button
-              className="rounded-md border border-border p-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary-light"
+              className="rounded-md border border-border p-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary-light disabled:cursor-wait disabled:opacity-50"
               type="button"
-              key={option}
-              onClick={() => onAnswer(optionIndex)}
+              key={answer.id}
+              onClick={() => onAnswer(answer.id)}
+              disabled={loading}
             >
-              {String.fromCharCode(65 + optionIndex)}. {option}
+              {String.fromCharCode(65 + answerIndex)}. {answer.answer_text}
             </button>
           ))}
         </div>
@@ -116,14 +104,10 @@ export function QuizPanel({
 }
 
 function QuizResults({
-  questions,
-  answers,
-  score,
+  result,
   onReset,
 }: {
-  questions: Question[];
-  answers: number[];
-  score: number;
+  result: ApiQuizSubmission;
   onReset: () => void;
 }) {
   return (
@@ -131,29 +115,31 @@ function QuizResults({
       <PageIntro
         eyebrow="Quiz complete"
         title={
-          score / questions.length > 0.9
+          result.score / result.total > 0.9
             ? "Excellent work"
             : "Keep building confidence"
         }
-        text={`${score} out of ${questions.length} correct.`}
+        text={`${result.score} out of ${result.total} correct.`}
       />
       <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
         <p className="font-display text-3xl font-semibold">
-          {Math.round((score / questions.length) * 100)}%
+          {Math.round((result.score / result.total) * 100)}%
         </p>
         <h2 className="mt-8 font-display text-xl font-semibold">
           Answer review
         </h2>
         <div className="mt-4 divide-y divide-border">
-          {questions.map((question, questionIndex) => (
-            <div className="py-4" key={question.prompt}>
+          {result.review.map((item, questionIndex) => (
+            <div className="py-4" key={item.question_id}>
               <p className="text-sm font-bold">
-                {questionIndex + 1}. {question.prompt}
+                {questionIndex + 1}. {item.question_text}
               </p>
-              <p className="mt-2 text-xs">
-                {answers[questionIndex] === question.answer
+              <p
+                className={`mt-2 text-xs font-bold ${item.is_correct ? "text-success" : "text-red-600"}`}
+              >
+                {item.is_correct
                   ? "Correct"
-                  : `Your answer: ${question.options[answers[questionIndex]] ?? "No answer"}`}
+                  : `Your answer: ${item.selected_answer ?? "No answer"}. Correct answer: ${item.correct_answer}`}
               </p>
             </div>
           ))}
@@ -163,12 +149,13 @@ function QuizResults({
           type="button"
           onClick={onReset}
         >
-          Back to quizzes
+          Back to quiz
         </button>
       </section>
     </>
   );
 }
+
 function PageIntro({
   eyebrow,
   title,

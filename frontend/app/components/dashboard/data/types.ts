@@ -1,12 +1,4 @@
 export type Tab = "home" | "lessons" | "quiz" | "lectures";
-export type QuizCategory = "theory" | "signs" | "intersections" | "final";
-
-export type Question = {
-  category: Exclude<QuizCategory, "final">;
-  prompt: string;
-  options: string[];
-  answer: number;
-};
 
 export type Instructor = {
   id: number;

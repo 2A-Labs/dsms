@@ -94,3 +94,37 @@ class BookingResponse(BaseModel):
     instructor_id: int
     slot: str
     status: str
+
+
+class QuizAnswerResponse(BaseModel):
+    id: int
+    answer_text: str
+
+
+class QuizQuestionResponse(BaseModel):
+    id: int
+    question_text: str
+    answers: list[QuizAnswerResponse]
+
+
+class QuizSubmissionAnswer(BaseModel):
+    question_id: int
+    answer_id: int
+
+
+class QuizSubmissionRequest(BaseModel):
+    answers: list[QuizSubmissionAnswer]
+
+
+class QuizReviewItem(BaseModel):
+    question_id: int
+    question_text: str
+    selected_answer: str | None
+    correct_answer: str
+    is_correct: bool
+
+
+class QuizSubmissionResponse(BaseModel):
+    score: int
+    total: int
+    review: list[QuizReviewItem]
