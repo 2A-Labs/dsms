@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authenticate } from "../lib/api";
+import { BrandLogo, useBranding } from "../BrandingShell";
 
 export default function Login() {
   const router = useRouter();
+  const branding = useBranding();
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -35,12 +37,7 @@ export default function Login() {
   return (
     <main className="grid min-h-screen bg-background font-sans text-text lg:grid-cols-[0.85fr_1.15fr]">
       <section className="hidden bg-primary px-12 py-12 text-white lg:flex lg:flex-col lg:justify-between xl:px-20">
-        <div className="flex items-center gap-2.5 font-display text-xl font-bold">
-          <span className="grid size-8 place-items-center rounded-md bg-white text-sm text-primary">
-            R
-          </span>
-          roadwise
-        </div>
+        <BrandLogo className="flex items-center gap-2.5 font-display text-xl font-bold" markClassName="grid size-8 place-items-center rounded-md bg-white p-1 text-sm text-primary" />
         <div className="max-w-md">
           <p className="mb-5 text-xs font-bold uppercase tracking-[0.2em] text-primary-light">
             One clear workspace
@@ -54,17 +51,12 @@ export default function Login() {
           </p>
         </div>
         <p className="text-xs text-primary-light">
-          Roadwise · Driving school operations
+          {branding.school_name} · Driving school operations
         </p>
       </section>
       <section className="flex items-center justify-center px-6 py-12 sm:px-12">
         <div className="w-full max-w-md">
-          <div className="mb-14 flex items-center gap-2.5 font-display text-xl font-bold lg:hidden">
-            <span className="grid size-8 place-items-center rounded-md bg-primary text-sm text-white">
-              R
-            </span>
-            roadwise
-          </div>
+          <BrandLogo className="mb-14 flex items-center gap-2.5 font-display text-xl font-bold lg:hidden" markClassName="grid size-8 place-items-center rounded-md bg-primary p-1 text-sm text-white" />
           <div className="mb-8">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
               {isSignUp ? "New workspace" : "Welcome back"}
@@ -132,7 +124,7 @@ export default function Login() {
             </button>
           </form>
           <p className="mt-7 text-center text-xs text-text-secondary">
-            {isSignUp ? "Already have an account?" : "New to Roadwise?"}{" "}
+            {isSignUp ? "Already have an account?" : `New to ${branding.school_name}?`}{" "}
             <button
               className="font-bold cursor-pointer text-primary"
               type="button"

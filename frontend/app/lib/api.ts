@@ -16,6 +16,7 @@ export type SchoolSettings = {
   id: number;
   school_name: string;
   logo_mark: string;
+  logo_data: string | null;
   primary_color: string;
   accent_color: string;
 };
@@ -53,6 +54,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail ?? "The request could not be completed");
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 

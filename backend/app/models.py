@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -36,6 +36,7 @@ class SchoolSettings(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     school_name: Mapped[str] = mapped_column(String(120), default="Roadwise")
     logo_mark: Mapped[str] = mapped_column(String(8), default="R")
+    logo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     primary_color: Mapped[str] = mapped_column(String(7), default="#4f46e5")
     accent_color: Mapped[str] = mapped_column(String(7), default="#e0e7ff")
 

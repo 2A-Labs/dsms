@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Instructor } from "../dashboard/data/types";
+import { BrandLogo } from "../../BrandingShell";
 
 export function ChooseInstructor({
   instructors,
@@ -18,12 +19,7 @@ export function ChooseInstructor({
   return (
     <main className="min-h-screen bg-background px-5 py-8 font-sans text-text sm:px-8 sm:py-12">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-center">
-        <div className="mb-10 flex items-center gap-2.5 font-display text-xl font-bold">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white">
-            R
-          </span>
-          roadwise
-        </div>
+        <BrandLogo className="mb-10 flex items-center gap-2.5 font-display text-xl font-bold" markClassName="grid size-8 place-items-center rounded-lg bg-primary text-sm text-white" />
         <div className="max-w-2xl">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
             One-time setup

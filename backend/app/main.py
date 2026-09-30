@@ -51,6 +51,8 @@ def verify_password(password: str, stored: str) -> bool:
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with Session(engine) as session:
+        session.execute(text("ALTER TABLE school_settings ADD COLUMN IF NOT EXISTS logo_data TEXT"))
+        session.commit()
         if session.scalar(select(Course.id).limit(1)) is None:
             session.add_all(
                 [
@@ -188,6 +190,8 @@ def update_school_settings(
         db.add(settings)
     settings.school_name = payload.school_name.strip() or "Roadwise"
     settings.logo_mark = payload.logo_mark.strip()[:2] or "R"
+    if payload.logo_data is not None:
+        settings.logo_data = payload.logo_data
     settings.primary_color = payload.primary_color
     settings.accent_color = payload.accent_color
     db.commit()

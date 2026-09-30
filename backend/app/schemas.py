@@ -56,6 +56,7 @@ class SchoolSettingsResponse(BaseModel):
     logo_mark: str
     primary_color: str
     accent_color: str
+    logo_data: str | None = None
 
 
 class SchoolSettingsUpdate(BaseModel):
@@ -63,6 +64,7 @@ class SchoolSettingsUpdate(BaseModel):
     logo_mark: str
     primary_color: str
     accent_color: str
+    logo_data: str | None = None
 
 
 class AuthResponse(BaseModel):
