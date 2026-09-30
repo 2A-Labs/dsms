@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { HomePanel } from "./HomePanel";
 import {
   initialBookable,
@@ -14,6 +15,8 @@ import { Sidebar } from "./Sidebar";
 import type { RequestStatus, View } from "./types";
 
 export default function InstructorPage() {
+  const router = useRouter();
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const [view, setView] = useState<View>("home");
   const [bookable, setBookable] = useState(initialBookable);
   const [requests, setRequests] = useState(initialRequests);
@@ -21,6 +24,19 @@ export default function InstructorPage() {
   const requestedCount = requests.filter(
     (request) => request.status === "Requested",
   ).length;
+
+  useEffect(() => {
+    setIsImpersonating(Boolean(localStorage.getItem("roadwise_admin_token")));
+  }, []);
+
+  function returnToAdmin() {
+    const adminToken = localStorage.getItem("roadwise_admin_token");
+    if (!adminToken) return;
+    localStorage.setItem("roadwise_token", adminToken);
+    localStorage.removeItem("roadwise_admin_token");
+    document.cookie = `roadwise_session=${adminToken}; path=/; max-age=86400; samesite=lax`;
+    router.replace("/admin");
+  }
 
   function toggleBookable(day: string, hour: string) {
     const key = `${day}-${hour}`;
@@ -54,6 +70,7 @@ export default function InstructorPage() {
           view={view}
           pendingCount={requestedCount}
           onViewChange={setView}
+          onReturnToAdmin={isImpersonating ? returnToAdmin : undefined}
         />
         <section className="w-full lg:ml-64">
           <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">

@@ -203,6 +203,22 @@ def list_admin_instructors(
     return list(db.scalars(select(User).where(User.role == "instructor").order_by(User.id)))
 
 
+@app.post("/api/admin/instructors/{instructor_id}/impersonate", response_model=AuthResponse)
+def impersonate_instructor(
+    instructor_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AuthResponse:
+    admin_user(authorization, db)
+    instructor = db.scalar(select(User).where(User.id == instructor_id, User.role == "instructor"))
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+    instructor.session_token = secrets.token_urlsafe(32)
+    db.commit()
+    db.refresh(instructor)
+    return AuthResponse(token=instructor.session_token, user=instructor)
+
+
 @app.post("/api/admin/instructors", response_model=UserResponse, status_code=201)
 def create_instructor(
     payload: InstructorCreate,
@@ -267,6 +283,11 @@ def delete_instructor(
     instructor = db.scalar(select(User).where(User.id == instructor_id, User.role == "instructor"))
     if instructor is None:
         raise HTTPException(status_code=404, detail="Instructor not found")
+    if db.scalar(select(Booking.id).where(Booking.instructor_id == instructor_id).limit(1)) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This instructor has booking history and cannot be removed",
+        )
     db.delete(instructor)
     db.commit()
 

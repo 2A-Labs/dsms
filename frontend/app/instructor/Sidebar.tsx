@@ -4,9 +4,10 @@ type SidebarProps = {
   view: View;
   pendingCount: number;
   onViewChange: (view: View) => void;
+  onReturnToAdmin?: () => void;
 };
 
-export function Sidebar({ view, pendingCount, onViewChange }: SidebarProps) {
+export function Sidebar({ view, pendingCount, onViewChange, onReturnToAdmin }: SidebarProps) {
   return (
     <aside className="w-full border-b border-border bg-surface px-5 py-5 lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
       <a
@@ -62,12 +63,15 @@ export function Sidebar({ view, pendingCount, onViewChange }: SidebarProps) {
           7 bookable slots open
         </p>
       </div>
-      <a
-        className="mt-auto hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"
-        href="/"
-      >
-        ← Back to admin workspace
-      </a>
+      {onReturnToAdmin && (
+        <button
+          className="mt-auto hidden border-t border-border pt-5 text-left text-xs font-bold text-primary lg:block"
+          onClick={onReturnToAdmin}
+          type="button"
+        >
+          ← Return to admin
+        </button>
+      )}
     </aside>
   );
 }

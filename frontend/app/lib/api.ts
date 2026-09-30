@@ -74,6 +74,12 @@ export function getAdminInstructors(): Promise<AdminInstructor[]> {
   return request<AdminInstructor[]>("/api/admin/instructors");
 }
 
+export function impersonateInstructor(id: number): Promise<AuthResponse> {
+  return request<AuthResponse>(`/api/admin/instructors/${id}/impersonate`, {
+    method: "POST",
+  });
+}
+
 export function getSchoolSettings(): Promise<SchoolSettings> {
   return request<SchoolSettings>("/api/admin/settings");
 }

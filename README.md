@@ -26,6 +26,10 @@ school name, logo mark, and color scheme, and are the only role allowed to add,
 edit, or remove instructor accounts. Students and instructors cannot use the
 admin API even if they call it directly.
 
+From the admin workspace, an admin can also log in as any instructor to review
+the instructor workspace. The instructor view includes a return link that
+restores the original admin session.
+
 Students can create accounts from the login screen, request lessons from the
 instructor availability returned by the API, and see their persisted booking
 status after signing in again.
