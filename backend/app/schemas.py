@@ -109,6 +109,29 @@ class BookingResponse(BaseModel):
     status: str
 
 
+class InstructorBookingResponse(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    slot: str
+    status: str
+
+
+class InstructorScheduleResponse(BaseModel):
+    bookable_slots: list[str]
+    bookings: list[InstructorBookingResponse]
+    booked_hours: int
+
+
+class InstructorAvailabilityUpdate(BaseModel):
+    slot: str
+    is_open: bool
+
+
+class BookingStatusUpdate(BaseModel):
+    status: str
+
+
 class QuizAnswerResponse(BaseModel):
     id: int
     answer_text: str

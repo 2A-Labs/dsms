@@ -1,16 +1,17 @@
+import base64
 import hashlib
 import hmac
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, QuizAnswer, QuizQuestion, SchoolSettings, User, VideoInstruction
+from app.models import Booking, Course, InstructorAvailability, QuizAnswer, QuizQuestion, SchoolSettings, User, VideoInstruction
 from app.schemas import (
     AuthResponse,
     BookingCreate,
@@ -18,8 +19,11 @@ from app.schemas import (
     CourseResponse,
     Credentials,
     InstructorCreate,
+    InstructorAvailabilityUpdate,
+    InstructorBookingResponse,
     InstructorAssignment,
     InstructorResponse,
+    InstructorScheduleResponse,
     InstructorUpdate,
     LectureResponse,
     SignUpRequest,
@@ -28,6 +32,7 @@ from app.schemas import (
     QuizQuestionResponse,
     QuizSubmissionRequest,
     QuizSubmissionResponse,
+    BookingStatusUpdate,
     UserResponse,
 )
 
@@ -85,6 +90,17 @@ async def lifespan(_: FastAPI):
                     User(name="Marcus Green", email="marcus@roadwise.local", password_hash=hash_password(secrets.token_urlsafe(24)), role="instructor", school="Roadwise Central", location="Lakeside"),
                 ]
             )
+        session.flush()
+        instructors = list(session.scalars(select(User).where(User.role == "instructor")))
+        for instructor in instructors:
+            for slot in INSTRUCTOR_SLOTS.get(instructor.name, []):
+                if session.scalar(
+                    select(InstructorAvailability.id).where(
+                        InstructorAvailability.instructor_id == instructor.id,
+                        InstructorAvailability.slot == slot,
+                    )
+                ) is None:
+                    session.add(InstructorAvailability(instructor_id=instructor.id, slot=slot))
         session.commit()
     yield
 
@@ -223,6 +239,13 @@ def admin_user(authorization: str | None, db: Session) -> User:
     user = authenticated_user(authorization, db)
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can manage school settings")
+    return user
+
+
+def instructor_user(authorization: str | None, db: Session) -> User:
+    user = authenticated_user(authorization, db)
+    if user.role != "instructor":
+        raise HTTPException(status_code=403, detail="Only instructors can manage lectures")
     return user
 
 
@@ -421,20 +444,222 @@ def delete_instructor(
     db.commit()
 
 
+@app.get("/api/instructor/lectures", response_model=list[LectureResponse])
+def list_instructor_lectures(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[LectureResponse]:
+    instructor = instructor_user(authorization, db)
+    lectures = db.scalars(
+        select(VideoInstruction)
+        .where(VideoInstruction.instructor_id == instructor.id)
+        .order_by(VideoInstruction.created_at.desc())
+    )
+    return [
+        LectureResponse(
+            id=lecture.id,
+            instructor_id=lecture.instructor_id,
+            instructor_name=instructor.name,
+            title=lecture.title,
+            file_url=lecture.file_url,
+            duration_seconds=lecture.duration_seconds,
+        )
+        for lecture in lectures
+    ]
+
+
+@app.post("/api/instructor/lectures", response_model=LectureResponse, status_code=201)
+async def create_instructor_lecture(
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> LectureResponse:
+    instructor = instructor_user(authorization, db)
+    if not file.content_type or not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Only video files can be uploaded")
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="The video file is empty")
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Video files must be smaller than 50 MB")
+    lecture = VideoInstruction(
+        instructor_id=instructor.id,
+        title=title.strip(),
+        file_url=f"data:{file.content_type};base64,{base64.b64encode(contents).decode('ascii')}",
+    )
+    db.add(lecture)
+    db.commit()
+    db.refresh(lecture)
+    return LectureResponse(
+        id=lecture.id,
+        instructor_id=lecture.instructor_id,
+        instructor_name=instructor.name,
+        title=lecture.title,
+        file_url=lecture.file_url,
+        duration_seconds=lecture.duration_seconds,
+    )
+
+
+@app.delete("/api/instructor/lectures/{lecture_id}", status_code=204)
+def delete_instructor_lecture(
+    lecture_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    instructor = instructor_user(authorization, db)
+    lecture = db.scalar(
+        select(VideoInstruction).where(
+            VideoInstruction.id == lecture_id,
+            VideoInstruction.instructor_id == instructor.id,
+        )
+    )
+    if lecture is None:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    db.delete(lecture)
+    db.commit()
+
+
 @app.get("/api/instructors", response_model=list[InstructorResponse])
 def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
     instructors = db.scalars(select(User).where(User.role == "instructor").order_by(User.id))
-    return [
-        InstructorResponse(
-            id=instructor.id,
-            name=instructor.name,
-            initials="".join(part[0] for part in instructor.name.split()),
-            school=instructor.school or "Roadwise Central",
-            location=instructor.location or "Northside",
-            slots=INSTRUCTOR_SLOTS.get(instructor.name, []),
+    result = []
+    for instructor in instructors:
+        availability = list(
+            db.scalars(
+                select(InstructorAvailability.slot).where(
+                    InstructorAvailability.instructor_id == instructor.id
+                )
+            )
         )
-        for instructor in instructors
+        booked_slots = set(
+            db.scalars(
+                select(Booking.slot).where(
+                    Booking.instructor_id == instructor.id,
+                    Booking.status != "Declined",
+                )
+            )
+        )
+        result.append(
+            InstructorResponse(
+                id=instructor.id,
+                name=instructor.name,
+                initials="".join(part[0] for part in instructor.name.split()),
+                school=instructor.school or "Roadwise Central",
+                location=instructor.location or "Northside",
+                slots=[slot for slot in availability if slot not in booked_slots],
+            )
+        )
+    return result
+
+
+@app.get("/api/instructor/schedule", response_model=InstructorScheduleResponse)
+def get_instructor_schedule(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> InstructorScheduleResponse:
+    instructor = instructor_user(authorization, db)
+    availability = list(
+        db.scalars(
+            select(InstructorAvailability.slot).where(
+                InstructorAvailability.instructor_id == instructor.id
+            )
+        )
+    )
+    bookings = list(
+        db.execute(
+            select(Booking, User.name)
+            .join(User, User.id == Booking.student_id)
+            .where(Booking.instructor_id == instructor.id)
+            .order_by(Booking.slot)
+        )
+    )
+    booking_responses = [
+        InstructorBookingResponse(
+            id=booking.id,
+            student_id=booking.student_id,
+            student_name=student_name,
+            slot=booking.slot,
+            status=booking.status,
+        )
+        for booking, student_name in bookings
     ]
+    booked_slots = {
+        booking.slot for booking, _ in bookings if booking.status != "Declined"
+    }
+    return InstructorScheduleResponse(
+        bookable_slots=[slot for slot in availability if slot not in booked_slots],
+        bookings=booking_responses,
+        booked_hours=sum(booking.status == "Booked" for booking, _ in bookings),
+    )
+
+
+@app.put("/api/instructor/availability")
+def update_instructor_availability(
+    payload: InstructorAvailabilityUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    instructor = instructor_user(authorization, db)
+    availability = db.scalar(
+        select(InstructorAvailability).where(
+            InstructorAvailability.instructor_id == instructor.id,
+            InstructorAvailability.slot == payload.slot,
+        )
+    )
+    active_booking = db.scalar(
+        select(Booking.id).where(
+            Booking.instructor_id == instructor.id,
+            Booking.slot == payload.slot,
+            Booking.status != "Declined",
+        )
+    )
+    if not payload.is_open and active_booking is not None:
+        raise HTTPException(status_code=409, detail="This slot has an active booking")
+    if payload.is_open and availability is None:
+        db.add(InstructorAvailability(instructor_id=instructor.id, slot=payload.slot))
+    elif not payload.is_open and availability is not None:
+        db.delete(availability)
+    db.commit()
+
+
+@app.patch("/api/instructor/bookings/{booking_id}")
+def update_instructor_booking(
+    booking_id: int,
+    payload: BookingStatusUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> InstructorBookingResponse:
+    instructor = instructor_user(authorization, db)
+    if payload.status not in {"Requested", "Booked", "Declined"}:
+        raise HTTPException(status_code=400, detail="Invalid booking status")
+    booking = db.scalar(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.instructor_id == instructor.id,
+        )
+    )
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if payload.status == "Booked":
+        conflict = db.scalar(
+            select(Booking.id).where(
+                Booking.instructor_id == instructor.id,
+                Booking.slot == booking.slot,
+                Booking.id != booking.id,
+                Booking.status == "Booked",
+            )
+        )
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="This slot is already booked")
+    booking.status = payload.status
+    db.commit()
+    student_name = db.scalar(select(User.name).where(User.id == booking.student_id))
+    return InstructorBookingResponse(
+        id=booking.id,
+        student_id=booking.student_id,
+        student_name=student_name or "Unknown student",
+        slot=booking.slot,
+        status=booking.status,
+    )
 
 
 @app.get("/api/lectures", response_model=list[LectureResponse])
@@ -479,7 +704,15 @@ def create_booking(
     if student.role != "student":
         raise HTTPException(status_code=403, detail="Only students can request lessons")
     instructor = db.scalar(select(User).where(User.id == payload.instructor_id, User.role == "instructor"))
-    if instructor is None or payload.slot not in INSTRUCTOR_SLOTS.get(instructor.name, []):
+    if instructor is None:
+        raise HTTPException(status_code=400, detail="That instructor is not available")
+    available = db.scalar(
+        select(InstructorAvailability.id).where(
+            InstructorAvailability.instructor_id == instructor.id,
+            InstructorAvailability.slot == payload.slot,
+        )
+    )
+    if available is None:
         raise HTTPException(status_code=400, detail="That instructor or time is not available")
     if student.instructor_id != instructor.id:
         raise HTTPException(status_code=403, detail="You can only request lessons from your chosen instructor")

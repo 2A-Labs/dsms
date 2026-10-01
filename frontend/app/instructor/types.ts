@@ -10,9 +10,15 @@ export type BookingRequest = {
   status: RequestStatus;
 };
 
-export type Lecture = { id: number; title: string; file: string };
+export type Lecture = {
+  id: number;
+  title: string;
+  file: string;
+  fileUrl?: string;
+};
 
 export type Lesson = {
+  day: string;
   time: string;
   student: string;
   detail: string;

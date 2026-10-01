@@ -24,11 +24,20 @@ export default function Login() {
       );
       localStorage.setItem("roadwise_token", response.token);
       document.cookie = `roadwise_session=${response.token}; path=/; max-age=86400; samesite=lax`;
-      const requestedPath = new URLSearchParams(window.location.search).get("next");
-      const defaultPath = response.user.role === "admin" ? "/admin" : response.user.role === "instructor" ? "/instructor" : "/";
-      router.replace(requestedPath?.startsWith("/") ? requestedPath : defaultPath);
+      document.cookie = `roadwise_role=${response.user.role}; path=/; max-age=86400; samesite=lax`;
+      const home =
+        response.user.role === "admin"
+          ? "/admin"
+          : response.user.role === "instructor"
+            ? "/instructor"
+            : "/";
+      router.replace(home);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to sign in");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to sign in",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -37,7 +46,10 @@ export default function Login() {
   return (
     <main className="grid min-h-screen bg-background font-sans text-text lg:grid-cols-[0.85fr_1.15fr]">
       <section className="hidden bg-primary px-12 py-12 text-white lg:flex lg:flex-col lg:justify-between xl:px-20">
-        <BrandLogo className="flex items-center gap-2.5 font-display text-xl font-bold" markClassName="grid size-8 place-items-center rounded-md bg-white p-1 text-sm text-primary" />
+        <BrandLogo
+          className="flex items-center gap-2.5 font-display text-xl font-bold"
+          markClassName="grid size-8 place-items-center rounded-md bg-white p-1 text-sm text-primary"
+        />
         <div className="max-w-md">
           <p className="mb-5 text-xs font-bold uppercase tracking-[0.2em] text-primary-light">
             One clear workspace
@@ -56,7 +68,10 @@ export default function Login() {
       </section>
       <section className="flex items-center justify-center px-6 py-12 sm:px-12">
         <div className="w-full max-w-md">
-          <BrandLogo className="mb-14 flex items-center gap-2.5 font-display text-xl font-bold lg:hidden" markClassName="grid size-8 place-items-center rounded-md bg-primary p-1 text-sm text-white" />
+          <BrandLogo
+            className="mb-14 flex items-center gap-2.5 font-display text-xl font-bold lg:hidden"
+            markClassName="grid size-8 place-items-center rounded-md bg-primary p-1 text-sm text-white"
+          />
           <div className="mb-8">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
               {isSignUp ? "New workspace" : "Welcome back"}
@@ -120,11 +135,17 @@ export default function Login() {
               type="submit"
               disabled={submitting}
             >
-              {submitting ? "Connecting..." : isSignUp ? "Create account" : "Sign in"}
+              {submitting
+                ? "Connecting..."
+                : isSignUp
+                  ? "Create account"
+                  : "Sign in"}
             </button>
           </form>
           <p className="mt-7 text-center text-xs text-text-secondary">
-            {isSignUp ? "Already have an account?" : `New to ${branding.school_name}?`}{" "}
+            {isSignUp
+              ? "Already have an account?"
+              : `New to ${branding.school_name}?`}{" "}
             <button
               className="font-bold cursor-pointer text-primary"
               type="button"

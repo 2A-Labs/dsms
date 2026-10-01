@@ -241,13 +241,19 @@ function RequestQueue({
         </div>
       </div>
       <div className="grid gap-4">
-        {requests.map((request) => (
-          <RequestCard
-            key={request.id}
-            request={request}
-            onUpdateRequest={onUpdateRequest}
-          />
-        ))}
+        {requests.length ? (
+          requests.map((request) => (
+            <RequestCard
+              key={request.id}
+              request={request}
+              onUpdateRequest={onUpdateRequest}
+            />
+          ))
+        ) : (
+          <p className="text-sm text-text-secondary">
+            No student booking requests yet.
+          </p>
+        )}
       </div>
     </section>
   );

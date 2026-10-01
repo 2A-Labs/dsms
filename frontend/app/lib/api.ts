@@ -1,5 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export function clearSession(): void {
+  localStorage.removeItem("roadwise_token");
+  localStorage.removeItem("roadwise_admin_token");
+  document.cookie = "roadwise_session=; path=/; max-age=0; samesite=lax";
+  document.cookie = "roadwise_role=; path=/; max-age=0; samesite=lax";
+}
+
 export type ApiUser = {
   id: number;
   name: string;
@@ -47,6 +54,20 @@ export type ApiLecture = {
   duration_seconds: number | null;
 };
 
+export type ApiInstructorBooking = {
+  id: number;
+  student_id: number;
+  student_name: string;
+  slot: string;
+  status: "Requested" | "Booked" | "Declined";
+};
+
+export type ApiInstructorSchedule = {
+  bookable_slots: string[];
+  bookings: ApiInstructorBooking[];
+  booked_hours: number;
+};
+
 export type ApiQuizAnswer = {
   id: number;
   answer_text: string;
@@ -82,7 +103,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(init.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
@@ -111,6 +134,30 @@ export function getInstructors(): Promise<ApiInstructor[]> {
 
 export function getMe(): Promise<ApiUser> {
   return request<ApiUser>("/api/me");
+}
+
+export function getInstructorSchedule(): Promise<ApiInstructorSchedule> {
+  return request<ApiInstructorSchedule>("/api/instructor/schedule");
+}
+
+export function updateInstructorAvailability(
+  slot: string,
+  isOpen: boolean,
+): Promise<void> {
+  return request<void>("/api/instructor/availability", {
+    method: "PUT",
+    body: JSON.stringify({ slot, is_open: isOpen }),
+  });
+}
+
+export function updateInstructorBooking(
+  id: number,
+  status: ApiInstructorBooking["status"],
+): Promise<ApiInstructorBooking> {
+  return request<ApiInstructorBooking>(`/api/instructor/bookings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export function assignInstructor(instructorId: number): Promise<ApiUser> {
@@ -182,6 +229,28 @@ export function getMyBookings(): Promise<ApiBooking[]> {
 
 export function getMyLectures(): Promise<ApiLecture[]> {
   return request<ApiLecture[]>("/api/lectures");
+}
+
+export function getInstructorLectures(): Promise<ApiLecture[]> {
+  return request<ApiLecture[]>("/api/instructor/lectures");
+}
+
+export function createInstructorLecture(
+  title: string,
+  file: File,
+): Promise<ApiLecture> {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("file", file);
+  return request<ApiLecture>("/api/instructor/lectures", {
+    method: "POST",
+    body: formData,
+    headers: {},
+  });
+}
+
+export function deleteInstructorLecture(id: number): Promise<void> {
+  return request<void>(`/api/instructor/lectures/${id}`, { method: "DELETE" });
 }
 
 export function createBooking(

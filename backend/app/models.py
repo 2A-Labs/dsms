@@ -52,6 +52,17 @@ class Booking(Base):
     status: Mapped[str] = mapped_column(String(30), default="Requested")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+
+class InstructorAvailability(Base):
+    __tablename__ = "instructor_availability"
+    __table_args__ = (
+        UniqueConstraint("instructor_id", "slot", name="uq_instructor_availability_slot"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    instructor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    slot: Mapped[str] = mapped_column(String(80))
+
 class StudentInstructor(Base):
     __tablename__ = "student_instructors"
     __table_args__ = (

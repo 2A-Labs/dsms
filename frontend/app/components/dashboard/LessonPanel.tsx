@@ -23,6 +23,13 @@ export function LessonPanel({
 }: LessonPanelProps) {
   const instructor: Instructor =
     instructors.find((item) => item.id === instructorId) ?? instructors[0];
+  if (!instructor) {
+    return (
+      <section className="rounded-lg border border-border bg-surface p-6 text-sm text-text-secondary">
+        No instructor is currently available for booking.
+      </section>
+    );
+  }
   return (
     <>
       <PageIntro
@@ -50,16 +57,22 @@ export function LessonPanel({
             Pick an available time
           </h3>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {instructor.slots.map((slot) => (
-              <button
-                className={`rounded-md border px-3 py-3 text-xs font-bold ${selectedSlot === slot ? "border-primary bg-primary text-white" : "border-border text-text-secondary hover:border-primary hover:text-primary"}`}
-                type="button"
-                key={slot}
-                onClick={() => onSlotChange(slot)}
-              >
-                {slot}
-              </button>
-            ))}
+            {instructor.slots.length ? (
+              instructor.slots.map((slot) => (
+                <button
+                  className={`rounded-md border px-3 py-3 text-xs font-bold ${selectedSlot === slot ? "border-primary bg-primary text-white" : "border-border text-text-secondary hover:border-primary hover:text-primary"}`}
+                  type="button"
+                  key={slot}
+                  onClick={() => onSlotChange(slot)}
+                >
+                  {slot}
+                </button>
+              ))
+            ) : (
+              <p className="text-sm text-text-secondary">
+                No bookable times are available for this instructor.
+              </p>
+            )}
           </div>
         </section>
         <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
@@ -94,14 +107,14 @@ export function LessonPanel({
                   {requestError}
                 </p>
               )}
-            <button
-              className="mt-6 w-full rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              type="button"
-              disabled={!selectedSlot}
-              onClick={onRequest}
-            >
-              Send booking request
-            </button>
+              <button
+                className="mt-6 w-full rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                disabled={!selectedSlot}
+                onClick={onRequest}
+              >
+                Send booking request
+              </button>
             </>
           )}
         </section>

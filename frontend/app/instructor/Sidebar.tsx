@@ -3,21 +3,44 @@ import { BrandLogo } from "../BrandingShell";
 
 type SidebarProps = {
   view: View;
+  instructorName: string;
+  bookedHours: number;
+  bookableSlots: number;
   pendingCount: number;
   onViewChange: (view: View) => void;
   onReturnToAdmin?: () => void;
+  onSignOut: () => void;
 };
 
-export function Sidebar({ view, pendingCount, onViewChange, onReturnToAdmin }: SidebarProps) {
+export function Sidebar({
+  view,
+  instructorName,
+  bookedHours,
+  bookableSlots,
+  pendingCount,
+  onViewChange,
+  onReturnToAdmin,
+  onSignOut,
+}: SidebarProps) {
   return (
     <aside className="w-full border-b border-border bg-surface px-5 py-5 lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
-      <a href="/"><BrandLogo className="flex items-center gap-2.5 font-display text-xl font-bold" markClassName="grid size-8 place-items-center rounded-md bg-primary text-sm text-white" /></a>
+      <a href="/">
+        <BrandLogo
+          className="flex items-center gap-2.5 font-display text-xl font-bold"
+          markClassName="grid size-8 place-items-center rounded-md bg-primary text-sm text-white"
+        />
+      </a>
       <div className="mt-10 flex items-center gap-3 border-b border-border pb-5">
         <span className="grid size-9 place-items-center rounded-full bg-primary-light text-xs font-bold text-primary">
-          JC
+          {instructorName
+            .split(" ")
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase() || "IN"}
         </span>
         <div>
-          <p className="text-xs font-bold">Jamie Carter</p>
+          <p className="text-xs font-bold">{instructorName}</p>
           <p className="mt-0.5 text-[11px] text-text-secondary">Instructor</p>
         </div>
       </div>
@@ -50,10 +73,12 @@ export function Sidebar({ view, pendingCount, onViewChange, onReturnToAdmin }: S
           This week
         </p>
         <p className="mt-2 font-display text-2xl font-semibold text-primary">
-          12 hours
+          {bookedHours} {bookedHours === 1 ? "hour" : "hours"}
         </p>
         <p className="mt-1 text-[11px] text-primary/70">
-          7 bookable slots open
+          {bookableSlots
+            ? `${bookableSlots} bookable slots open`
+            : "No bookable slots open"}
         </p>
       </div>
       {onReturnToAdmin && (
@@ -65,6 +90,13 @@ export function Sidebar({ view, pendingCount, onViewChange, onReturnToAdmin }: S
           ← Return to admin
         </button>
       )}
+      <button
+        className="mt-auto hidden border-t border-border pt-5 text-left text-xs font-bold text-text-secondary lg:block"
+        onClick={onSignOut}
+        type="button"
+      >
+        Sign out
+      </button>
     </aside>
   );
 }

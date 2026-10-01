@@ -1,24 +1,56 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { Lecture } from "./types";
 
 type LecturesProps = {
   lectures: Lecture[];
-  onAdd: (lecture: Omit<Lecture, "id">) => void;
-  onRemove: (id: number) => void;
+  onAdd: (title: string, file: File) => Promise<void>;
+  onRemove: (id: number) => Promise<void>;
 };
 
 export function LecturesPanel({ lectures, onAdd, onRemove }: LecturesProps) {
   const [title, setTitle] = useState("");
-  const [file, setFile] = useState("");
-  function addLecture(event: FormEvent<HTMLFormElement>) {
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  async function addLecture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title || !file) return;
-    onAdd({ title, file });
-    setTitle("");
-    setFile("");
-    event.currentTarget.reset();
+    setError("");
+    setSubmitting(true);
+    try {
+      await onAdd(title, file);
+      setTitle("");
+      setFile(null);
+      event.currentTarget.reset();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to upload lecture",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeLecture(id: number) {
+    setError("");
+    setRemovingId(id);
+    try {
+      await onRemove(id);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to remove lecture",
+      );
+    } finally {
+      setRemovingId(null);
+    }
   }
   return (
     <>
@@ -54,23 +86,24 @@ export function LecturesPanel({ lectures, onAdd, onRemove }: LecturesProps) {
                 className="rounded-md border border-border bg-background px-3 py-3 text-xs font-normal"
                 type="file"
                 accept="video/*"
-                onChange={(event) =>
-                  setFile(event.target.files?.[0]?.name ?? "")
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setFile(event.target.files?.[0] ?? null)
                 }
                 required
               />
             </label>
             {file && (
               <p className="-mt-2 text-xs text-text-secondary">
-                Selected: {file}
+                Selected: {file.name}
               </p>
             )}
+            {error && <p className="text-xs font-bold text-error">{error}</p>}
             <button
               className="rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
               type="submit"
-              disabled={!title || !file}
+              disabled={!title || !file || submitting}
             >
-              Add lecture
+              {submitting ? "Uploading..." : "Add lecture"}
             </button>
           </form>
         </section>
@@ -89,29 +122,36 @@ export function LecturesPanel({ lectures, onAdd, onRemove }: LecturesProps) {
             </span>
           </div>
           <div className="grid gap-3">
-            {lectures.map((lecture) => (
-              <div
-                className="flex items-center gap-4 border-b border-border pb-4 last:border-0 last:pb-0"
-                key={lecture.id}
-              >
-                <span className="grid size-10 place-items-center rounded-md bg-primary-light text-primary">
-                  ▶
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold">{lecture.title}</p>
-                  <p className="mt-1 truncate text-[11px] text-text-secondary">
-                    {lecture.file}
-                  </p>
-                </div>
-                <button
-                  className="text-xs font-bold text-error"
-                  type="button"
-                  onClick={() => onRemove(lecture.id)}
+            {lectures.length ? (
+              lectures.map((lecture) => (
+                <div
+                  className="flex items-center gap-4 border-b border-border pb-4 last:border-0 last:pb-0"
+                  key={lecture.id}
                 >
-                  Remove
-                </button>
-              </div>
-            ))}
+                  <span className="grid size-10 place-items-center rounded-md bg-primary-light text-primary">
+                    ▶
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold">{lecture.title}</p>
+                    <p className="mt-1 truncate text-[11px] text-text-secondary">
+                      {lecture.file}
+                    </p>
+                  </div>
+                  <button
+                    className="text-xs font-bold text-error"
+                    type="button"
+                    disabled={removingId === lecture.id}
+                    onClick={() => removeLecture(lecture.id)}
+                  >
+                    {removingId === lecture.id ? "Removing..." : "Remove"}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-text-secondary">
+                No published video lectures yet.
+              </p>
+            )}
           </div>
         </section>
       </div>

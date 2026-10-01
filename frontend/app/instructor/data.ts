@@ -58,26 +58,86 @@ export const initialRequests: BookingRequest[] = [
   },
 ];
 
-export const lessons: Lesson[] = [
-  {
-    time: "09:00",
-    student: "Liam Johnson",
-    detail: "Practical lesson · B Licence",
-    status: "Complete",
-  },
-  {
-    time: "11:15",
-    student: "Sofia Chen",
-    detail: "Practical lesson · City driving",
-    status: "Next up",
-  },
-  {
-    time: "14:00",
-    student: "Daniel Brooks",
-    detail: "Assessment · B Licence",
-    status: "Upcoming",
-  },
-];
+const lessonsByInstructor: Record<string, Lesson[]> = {
+  "Jamie Carter": [
+    {
+      day: "Mon 28",
+      time: "09:00",
+      student: "Liam Johnson",
+      detail: "Practical lesson · B Licence",
+      status: "Complete",
+    },
+    {
+      day: "Tue 29",
+      time: "13:00",
+      student: "Sofia Chen",
+      detail: "Practical lesson · City driving",
+      status: "Next up",
+    },
+    {
+      day: "Thu 01",
+      time: "15:00",
+      student: "Daniel Brooks",
+      detail: "Assessment · B Licence",
+      status: "Upcoming",
+    },
+  ],
+  "Priya Shah": [
+    {
+      day: "Mon 28",
+      time: "11:00",
+      student: "Maya Patel",
+      detail: "Practical lesson · B Licence",
+      status: "Complete",
+    },
+    {
+      day: "Wed 30",
+      time: "10:00",
+      student: "Noah Williams",
+      detail: "Practical lesson · B Licence",
+      status: "Next up",
+    },
+    {
+      day: "Fri 02",
+      time: "14:00",
+      student: "Sofia Chen",
+      detail: "City driving practice",
+      status: "Upcoming",
+    },
+  ],
+  "Marcus Green": [
+    {
+      day: "Tue 29",
+      time: "10:00",
+      student: "Maya Patel",
+      detail: "Practical lesson · B Licence",
+      status: "Complete",
+    },
+    {
+      day: "Thu 01",
+      time: "09:00",
+      student: "Noah Williams",
+      detail: "Practical lesson · B Licence",
+      status: "Next up",
+    },
+    {
+      day: "Sat 03",
+      time: "11:00",
+      student: "Sofia Chen",
+      detail: "City driving practice",
+      status: "Upcoming",
+    },
+  ],
+};
+
+export function getLessonsForInstructor(
+  instructorName: string,
+  day: string,
+): Lesson[] {
+  return (lessonsByInstructor[instructorName] ?? []).filter(
+    (lesson) => lesson.day === day,
+  );
+}
 
 export const initialLectures: Lecture[] = [
   { id: 1, title: "Mirror, signal, manoeuvre", file: "mirror-signal.mp4" },

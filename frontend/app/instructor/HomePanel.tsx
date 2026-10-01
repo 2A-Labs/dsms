@@ -1,15 +1,34 @@
-import { lessons } from "./data";
+import { getLessonsForInstructor } from "./data";
 
-export function HomePanel({ onPlanner }: { onPlanner: () => void }) {
+export function HomePanel({
+  instructorName,
+  onPlanner,
+}: {
+  instructorName: string;
+  onPlanner: () => void;
+}) {
+  const today = new Date();
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(today);
+  const dayKey = `${new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(today)} ${String(today.getDate()).padStart(2, "0")}`;
+  const lessons = getLessonsForInstructor(instructorName, dayKey);
+  const completedLessons = lessons.filter(
+    (lesson) => lesson.status === "Complete",
+  ).length;
+
   return (
     <>
       <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
-            Friday, 26 September 2026
+            {dateLabel}
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            Good morning, Jamie.
+            Good morning, {instructorName}.
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
             Here&apos;s your teaching plan for today.
@@ -24,7 +43,11 @@ export function HomePanel({ onPlanner }: { onPlanner: () => void }) {
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Summary label="Lessons today" value="3" detail="1 complete" />
+        <Summary
+          label="Lessons today"
+          value={String(lessons.length)}
+          detail={`${completedLessons} complete`}
+        />
         <Summary
           label="Bookable this week"
           value="7"
@@ -43,35 +66,41 @@ export function HomePanel({ onPlanner }: { onPlanner: () => void }) {
               Today&apos;s lessons
             </h2>
             <p className="mt-1 text-xs text-text-secondary">
-              Your schedule for Friday, 26 September
+              Your schedule for {dateLabel}
             </p>
           </div>
           <span className="rounded-full bg-primary-light px-2.5 py-1 text-[10px] font-bold text-primary">
-            On schedule
+            {lessons.length ? "On schedule" : "No classes"}
           </span>
         </div>
         <div className="divide-y divide-border border-y border-border">
-          {lessons.map((lesson) => (
-            <div
-              className="grid min-h-22 grid-cols-[52px_1fr_auto] items-center gap-4"
-              key={lesson.time}
-            >
-              <time className="font-display text-sm font-semibold text-text-secondary">
-                {lesson.time}
-              </time>
-              <div>
-                <p className="text-sm font-bold">{lesson.student}</p>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {lesson.detail}
-                </p>
-              </div>
-              <span
-                className={`text-[10px] font-bold ${lesson.status === "Complete" ? "text-success" : lesson.status === "Next up" ? "text-primary" : "text-text-secondary"}`}
+          {lessons.length ? (
+            lessons.map((lesson) => (
+              <div
+                className="grid min-h-22 grid-cols-[52px_1fr_auto] items-center gap-4"
+                key={`${lesson.day}-${lesson.time}`}
               >
-                {lesson.status}
-              </span>
-            </div>
-          ))}
+                <time className="font-display text-sm font-semibold text-text-secondary">
+                  {lesson.time}
+                </time>
+                <div>
+                  <p className="text-sm font-bold">{lesson.student}</p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {lesson.detail}
+                  </p>
+                </div>
+                <span
+                  className={`text-[10px] font-bold ${lesson.status === "Complete" ? "text-success" : lesson.status === "Next up" ? "text-primary" : "text-text-secondary"}`}
+                >
+                  {lesson.status}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="px-2 py-8 text-sm text-text-secondary">
+              No classes scheduled for today.
+            </p>
+          )}
         </div>
       </section>
     </>

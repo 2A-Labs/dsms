@@ -1,5 +1,6 @@
 import type { Tab } from "./data/types";
 import { BrandLogo } from "../../BrandingShell";
+import { clearSession } from "../../lib/api";
 
 type SidebarProps = {
   tab: Tab;
@@ -62,12 +63,16 @@ export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
           onClick={() => onTabChange("lectures")}
         />
       </nav>
-      <a
+      <button
         className="mt-auto hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"
-        href="/login"
+        onClick={() => {
+          clearSession();
+          window.location.href = "/login";
+        }}
+        type="button"
       >
         Sign out
-      </a>
+      </button>
     </aside>
   );
 }
