@@ -38,11 +38,7 @@ from app.schemas import (
 
 DEFAULT_ADMIN_EMAIL = "admin@roadwise.local"
 DEFAULT_ADMIN_PASSWORD = "Roadwise123!"
-INSTRUCTOR_SLOTS = {
-    "Jamie Carter": ["Mon 28 · 09:00", "Tue 29 · 13:00", "Thu 01 · 15:00"],
-    "Priya Shah": ["Mon 28 · 11:00", "Wed 30 · 10:00", "Fri 02 · 14:00"],
-    "Marcus Green": ["Tue 29 · 10:00", "Thu 01 · 09:00", "Sat 03 · 11:00"],
-}
+SETUP_REQUIRED_MESSAGE = "Please ask your administrator to set up the application"
 
 
 def hash_password(password: str) -> str:
@@ -82,25 +78,6 @@ async def lifespan(_: FastAPI):
             )
         if session.scalar(select(SchoolSettings.id).limit(1)) is None:
             session.add(SchoolSettings())
-        if session.scalar(select(User.id).where(User.role == "instructor")) is None:
-            session.add_all(
-                [
-                    User(name="Jamie Carter", email="jamie@roadwise.local", password_hash=hash_password(secrets.token_urlsafe(24)), role="instructor", school="Roadwise Central", location="Northside"),
-                    User(name="Priya Shah", email="priya@roadwise.local", password_hash=hash_password(secrets.token_urlsafe(24)), role="instructor", school="Roadwise Central", location="West End"),
-                    User(name="Marcus Green", email="marcus@roadwise.local", password_hash=hash_password(secrets.token_urlsafe(24)), role="instructor", school="Roadwise Central", location="Lakeside"),
-                ]
-            )
-        session.flush()
-        instructors = list(session.scalars(select(User).where(User.role == "instructor")))
-        for instructor in instructors:
-            for slot in INSTRUCTOR_SLOTS.get(instructor.name, []):
-                if session.scalar(
-                    select(InstructorAvailability.id).where(
-                        InstructorAvailability.instructor_id == instructor.id,
-                        InstructorAvailability.slot == slot,
-                    )
-                ) is None:
-                    session.add(InstructorAvailability(instructor_id=instructor.id, slot=slot))
         session.commit()
     yield
 
@@ -267,6 +244,8 @@ def login(payload: Credentials, db: Session = Depends(get_db)) -> AuthResponse:
     user = db.scalar(select(User).where(User.email == payload.email.strip().lower()))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.role != "admin" and db.scalar(select(User.id).where(User.role == "instructor")) is None:
+        raise HTTPException(status_code=503, detail=SETUP_REQUIRED_MESSAGE)
     user.session_token = secrets.token_urlsafe(32)
     db.commit()
     db.refresh(user)
