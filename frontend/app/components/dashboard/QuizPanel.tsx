@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ApiQuizQuestion, ApiQuizSubmission } from "../../lib/api";
 
 type QuizPanelProps = {
@@ -9,7 +10,7 @@ type QuizPanelProps = {
   loading: boolean;
   error: string;
   onStart: () => void;
-  onAnswer: (answer: number) => void | Promise<void>;
+  onAnswer: (answerIds: number[]) => void | Promise<void>;
   onReset: () => void;
 };
 
@@ -23,6 +24,12 @@ export function QuizPanel({
   onAnswer,
   onReset,
 }: QuizPanelProps) {
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+
+  useEffect(() => {
+    setSelectedAnswers([]);
+  }, [index]);
+
   if (!result && questions.length === 0) {
     return (
       <>
@@ -68,6 +75,20 @@ export function QuizPanel({
   }
 
   const question = questions[index];
+  const isMultiple = question.allow_multiple;
+
+  function chooseAnswer(answerId: number) {
+    if (!isMultiple) {
+      void onAnswer([answerId]);
+      return;
+    }
+    setSelectedAnswers((current) =>
+      current.includes(answerId)
+        ? current.filter((id) => id !== answerId)
+        : [...current, answerId],
+    );
+  }
+
   return (
     <>
       <PageIntro
@@ -82,22 +103,47 @@ export function QuizPanel({
             style={{ width: `${((index + 1) / questions.length) * 100}%` }}
           />
         </div>
+        {question.image_url && (
+          <img
+            className="mt-8 max-h-72 w-full rounded-md object-cover"
+            src={question.image_url}
+            alt="Question illustration"
+          />
+        )}
         <h2 className="mt-8 font-display text-2xl font-semibold leading-tight">
           {question.question_text}
         </h2>
+        {isMultiple && (
+          <p className="mt-2 text-xs font-bold text-primary">
+            Select all answers that apply.
+          </p>
+        )}
         <div className="mt-7 grid gap-3">
           {question.answers.map((answer, answerIndex) => (
             <button
-              className="rounded-md border border-border p-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary-light disabled:cursor-wait disabled:opacity-50"
+              className={`rounded-md border p-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary-light disabled:cursor-wait disabled:opacity-50 ${selectedAnswers.includes(answer.id) ? "border-primary bg-primary-light text-primary" : "border-border"}`}
               type="button"
               key={answer.id}
-              onClick={() => onAnswer(answer.id)}
+              onClick={() => chooseAnswer(answer.id)}
               disabled={loading}
             >
               {String.fromCharCode(65 + answerIndex)}. {answer.answer_text}
             </button>
           ))}
         </div>
+        {isMultiple && (
+          <button
+            className="mt-6 rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            disabled={!selectedAnswers.length || loading}
+            onClick={() => {
+              void onAnswer(selectedAnswers);
+              setSelectedAnswers([]);
+            }}
+          >
+            Continue
+          </button>
+        )}
       </section>
     </>
   );
@@ -139,7 +185,7 @@ function QuizResults({
               >
                 {item.is_correct
                   ? "Correct"
-                  : `Your answer: ${item.selected_answer ?? "No answer"}. Correct answer: ${item.correct_answer}`}
+                  : `Your answer: ${item.selected_answers.join(", ") || "No answer"}. Correct answer: ${item.correct_answers.join(", ")}`}
               </p>
             </div>
           ))}

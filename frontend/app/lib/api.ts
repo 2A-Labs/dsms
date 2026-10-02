@@ -92,14 +92,27 @@ export type ApiQuizAnswer = {
 export type ApiQuizQuestion = {
   id: number;
   question_text: string;
+  image_url: string | null;
+  allow_multiple: boolean;
   answers: ApiQuizAnswer[];
+};
+
+export type ApiQuizManageAnswer = ApiQuizAnswer & { is_correct: boolean };
+
+export type ApiQuizManageQuestion = {
+  id: number;
+  question_text: string;
+  image_url: string | null;
+  allow_multiple: boolean;
+  is_active: boolean;
+  answers: ApiQuizManageAnswer[];
 };
 
 export type ApiQuizReviewItem = {
   question_id: number;
   question_text: string;
-  selected_answer: string | null;
-  correct_answer: string;
+  selected_answers: string[];
+  correct_answers: string[];
   is_correct: boolean;
 };
 
@@ -118,6 +131,11 @@ export type HeroImage = {
   photographer_name: string;
   photographer_url: string;
   unsplash_url: string;
+};
+
+export type AssistantMessage = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -169,6 +187,16 @@ export function setupApplication(payload: {
   return request<AuthResponse>("/api/setup", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function chatWithAssistant(
+  message: string,
+  history: AssistantMessage[],
+): Promise<{ reply: string }> {
+  return request<{ reply: string }>("/api/assistant/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
   });
 }
 
@@ -359,10 +387,41 @@ export function getQuizQuestions(): Promise<ApiQuizQuestion[]> {
 }
 
 export function submitQuiz(
-  answers: { question_id: number; answer_id: number }[],
+  answers: { question_id: number; answer_ids: number[] }[],
 ): Promise<ApiQuizSubmission> {
   return request<ApiQuizSubmission>("/api/quiz/submit", {
     method: "POST",
     body: JSON.stringify({ answers }),
   });
+}
+
+export function getManageQuizQuestions(): Promise<ApiQuizManageQuestion[]> {
+  return request<ApiQuizManageQuestion[]>("/api/quiz/manage/questions");
+}
+
+export function createManageQuizQuestion(payload: {
+  question_text: string;
+  image_url: string | null;
+  allow_multiple: boolean;
+  is_active: boolean;
+  answers: { answer_text: string; is_correct: boolean }[];
+}): Promise<ApiQuizManageQuestion> {
+  return request<ApiQuizManageQuestion>("/api/quiz/manage/questions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateManageQuizQuestion(
+  id: number,
+  payload: Parameters<typeof createManageQuizQuestion>[0],
+): Promise<ApiQuizManageQuestion> {
+  return request<ApiQuizManageQuestion>(`/api/quiz/manage/questions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteManageQuizQuestion(id: number): Promise<void> {
+  return request<void>(`/api/quiz/manage/questions/${id}`, { method: "DELETE" });
 }

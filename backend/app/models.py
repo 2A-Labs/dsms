@@ -126,6 +126,8 @@ class QuizQuestion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allow_multiple: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
@@ -142,6 +144,5 @@ class QuizAnswer(Base):
 Index(
     "uq_quiz_answer_one_correct",
     QuizAnswer.question_id,
-    unique=True,
     postgresql_where=QuizAnswer.is_correct.is_(True),
 )

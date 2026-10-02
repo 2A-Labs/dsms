@@ -1,17 +1,45 @@
 import type { Tab } from "./data/types";
+import type { ApiBooking, ApiInstructor } from "../../lib/api";
 
 type HomePanelProps = {
   studentName: string;
+  instructor: ApiInstructor | undefined;
+  bookings: ApiBooking[];
+  lectureCount: number;
+  documentCount: number;
   onTabChange: (tab: Tab) => void;
 };
 
-export function HomePanel({ studentName, onTabChange }: HomePanelProps) {
+export function HomePanel({
+  studentName,
+  instructor,
+  bookings,
+  lectureCount,
+  documentCount,
+  onTabChange,
+}: HomePanelProps) {
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+  const nextBooking = bookings.find(
+    (booking) => booking.status === "Booked" || booking.status === "Requested",
+  );
+  const pendingRequests = bookings.filter(
+    (booking) => booking.status === "Requested",
+  ).length;
+  const confirmedLessons = bookings.filter(
+    (booking) => booking.status === "Booked",
+  ).length;
+
   return (
     <>
       <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
-            Sunday, 27 September 2026
+            {dateLabel}
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             Good morning, {studentName}.
@@ -30,46 +58,70 @@ export function HomePanel({ studentName, onTabChange }: HomePanelProps) {
       </div>
       <section className="rounded-lg bg-primary p-5 text-white shadow-lg shadow-primary/15 sm:p-7">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary-light">
-          Next driving test
+          Next booking
         </p>
         <p className="mt-2 font-display text-2xl font-semibold">
-          Practical test · 14 October
+          {nextBooking ? formatSlot(nextBooking.slot) : "No upcoming bookings"}
         </p>
         <p className="mt-1 text-sm text-primary-light">
-          09:30 · Northside Test Centre
+          {nextBooking
+            ? nextBooking.status === "Booked"
+              ? "Confirmed lesson"
+              : "Awaiting instructor approval"
+            : "Choose a time from your instructor's availability."}
         </p>
       </section>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Stat label="Lessons completed" value="12" detail="of 20 planned" />
-        <Stat label="Quiz readiness" value="68%" detail="Keep practising" />
         <Stat
-          label="Next lesson"
-          value="Tue 29"
-          detail="13:00 · Jamie Carter"
+          label="Assigned instructor"
+          value={instructor?.name ?? "Not assigned"}
+          detail="Your lesson contact"
+        />
+        <Stat
+          label="Confirmed lessons"
+          value={String(confirmedLessons)}
+          detail="From your booking history"
+        />
+        <Stat
+          label="Pending requests"
+          value={String(pendingRequests)}
+          detail="Awaiting a decision"
         />
       </div>
       <section className="mt-6 rounded-lg border border-border bg-surface p-5 sm:p-7">
         <div className="mb-6 flex items-start justify-between">
           <div>
             <h2 className="font-display text-xl font-semibold">
-              Your learning path
+                  Your resources
             </h2>
             <p className="mt-1 text-xs text-text-secondary">
-              Small steps, steady progress.
+                  Materials currently available in your workspace.
             </p>
           </div>
           <button
             className="text-xs font-bold text-primary"
             type="button"
-            onClick={() => onTabChange("quiz")}
+            onClick={() => onTabChange("assistant")}
           >
-            Open quizzes →
+            Open assistant →
           </button>
         </div>
         <div className="grid gap-4">
-          <Progress label="Driving theory" value="74%" progress={74} />
-          <Progress label="Road signs" value="61%" progress={61} />
-          <Progress label="Junctions" value="58%" progress={58} />
+          <ResourceRow
+            label="Video lectures"
+            value={lectureCount}
+            onClick={() => onTabChange("lectures")}
+          />
+          <ResourceRow
+            label="Documents"
+            value={documentCount}
+            onClick={() => onTabChange("documents")}
+          />
+          <ResourceRow
+            label="Quiz questions"
+            value="On demand"
+            onClick={() => onTabChange("quiz")}
+          />
         </div>
       </section>
     </>
@@ -95,27 +147,27 @@ function Stat({
     </article>
   );
 }
-function Progress({
+function ResourceRow({
   label,
   value,
-  progress,
+  onClick,
 }: {
   label: string;
-  value: string;
-  progress: number;
+  value: number | string;
+  onClick: () => void;
 }) {
   return (
-    <div>
-      <div className="mb-2 flex justify-between text-xs">
+    <button
+      className="flex w-full items-center justify-between border-b border-border pb-3 text-left text-xs last:border-0 last:pb-0"
+      type="button"
+      onClick={onClick}
+    >
         <span className="font-bold">{label}</span>
-        <span className="font-bold text-primary">{value}</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-background">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
+        <span className="font-bold text-primary">{value} →</span>
+    </button>
   );
+}
+
+function formatSlot(slot: string): string {
+  return slot.replace(" · ", " at ");
 }

@@ -1,10 +1,14 @@
-import { getLessonsForInstructor } from "./data";
+import type { BookingRequest } from "./types";
 
 export function HomePanel({
   instructorName,
+  requests,
+  bookableSlots,
   onPlanner,
 }: {
   instructorName: string;
+  requests: BookingRequest[];
+  bookableSlots: number;
   onPlanner: () => void;
 }) {
   const today = new Date();
@@ -14,10 +18,10 @@ export function HomePanel({
     month: "long",
     year: "numeric",
   }).format(today);
-  const dayKey = `${new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(today)} ${String(today.getDate()).padStart(2, "0")}`;
-  const lessons = getLessonsForInstructor(instructorName, dayKey);
-  const completedLessons = lessons.filter(
-    (lesson) => lesson.status === "Complete",
+  const dayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const lessons = requests.filter((request) => request.day === dayKey);
+  const pendingRequests = requests.filter(
+    (request) => request.status === "Requested",
   ).length;
 
   return (
@@ -39,24 +43,24 @@ export function HomePanel({
           type="button"
           onClick={onPlanner}
         >
-          Plan your week →
+          Plan availability →
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Summary
           label="Lessons today"
           value={String(lessons.length)}
-          detail={`${completedLessons} complete`}
+          detail="From current bookings"
         />
         <Summary
-          label="Bookable this week"
-          value="7"
-          detail="Slots available"
+          label="Bookable slots"
+          value={String(bookableSlots)}
+          detail="Currently open"
         />
         <Summary
           label="Requests to review"
-          value="2"
-          detail="Needs your decision"
+          value={String(pendingRequests)}
+          detail="Awaiting your decision"
         />
       </div>
       <section className="mt-6 rounded-lg border border-border bg-surface p-5 sm:p-7">
@@ -85,12 +89,10 @@ export function HomePanel({
                 </time>
                 <div>
                   <p className="text-sm font-bold">{lesson.student}</p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {lesson.detail}
-                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">Driving lesson</p>
                 </div>
                 <span
-                  className={`text-[10px] font-bold ${lesson.status === "Complete" ? "text-success" : lesson.status === "Next up" ? "text-primary" : "text-text-secondary"}`}
+                  className={`text-[10px] font-bold ${lesson.status === "Booked" ? "text-success" : lesson.status === "Requested" ? "text-primary" : "text-text-secondary"}`}
                 >
                   {lesson.status}
                 </span>

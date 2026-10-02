@@ -1,4 +1,10 @@
-export type Tab = "home" | "lessons" | "quiz" | "lectures" | "documents";
+export type Tab =
+  | "home"
+  | "lessons"
+  | "quiz"
+  | "lectures"
+  | "documents"
+  | "assistant";
 
 export type Instructor = {
   id: number;

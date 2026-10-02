@@ -7,6 +7,7 @@ import { getPlannerDays, hours, isPlannerSlotPast } from "./data";
 import { LecturesPanel } from "./LecturesPanel";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { StudentsPanel } from "./StudentsPanel";
+import { QuizEditorPanel } from "../components/quiz/QuizEditorPanel";
 import { PlannerPanel } from "./PlannerPanel";
 import { Sidebar } from "./Sidebar";
 import type { BookingRequest, RequestStatus, View } from "./types";
@@ -202,6 +203,8 @@ export default function InstructorPage() {
             {view === "home" ? (
               <HomePanel
                 instructorName={instructorName}
+                requests={requests}
+                bookableSlots={bookable.size}
                 onPlanner={() => setView("planner")}
               />
             ) : view === "planner" ? (
@@ -249,7 +252,7 @@ export default function InstructorPage() {
                   );
                 }}
               />
-            ) : (
+            ) : view === "students" ? (
               <StudentsPanel
                 students={students}
                 onUpdate={async (id, name, email) => {
@@ -262,6 +265,8 @@ export default function InstructorPage() {
                   await resetStudentPassword(id, password);
                 }}
               />
+            ) : (
+              <QuizEditorPanel />
             )}
           </div>
         </section>

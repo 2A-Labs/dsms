@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HomePanel } from "./components/dashboard/HomePanel";
 import { LecturesPanel } from "./components/dashboard/LecturesPanel";
 import { DocumentsPanel } from "./components/dashboard/DocumentsPanel";
+import { AssistantPanel } from "./components/dashboard/AssistantPanel";
 import { LessonPanel } from "./components/dashboard/LessonPanel";
 import { QuizPanel } from "./components/dashboard/QuizPanel";
 import { Sidebar } from "./components/dashboard/Sidebar";
@@ -32,11 +33,12 @@ export default function Dashboard() {
   >(null);
   const [tab, setTab] = useState<Tab>("home");
   const [selectedSlot, setSelectedSlot] = useState("");
+  const [bookings, setBookings] = useState<import("./lib/api").ApiBooking[]>([]);
   const [requestSent, setRequestSent] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [quizQuestions, setQuizQuestions] = useState<ApiQuizQuestion[]>([]);
   const [quizIndex, setQuizIndex] = useState(0);
-  const [answers, setAnswers] = useState<number[]>([]);
+  const [answers, setAnswers] = useState<number[][]>([]);
   const [quizResult, setQuizResult] = useState<ApiQuizSubmission | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState("");
@@ -60,6 +62,7 @@ export default function Dashboard() {
       .then(([availableInstructors, user, bookings, availableLectures, availableDocuments]) => {
         setInstructors(availableInstructors);
         setStudentName(user.name);
+        setBookings(bookings);
         setLectures(availableLectures);
         setDocuments(availableDocuments);
         if (user.instructor_id !== null) {
@@ -122,9 +125,9 @@ export default function Dashboard() {
     }
   }
 
-  async function chooseAnswer(answer: number) {
+  async function chooseAnswer(answerIds: number[]) {
     const nextAnswers = [...answers];
-    nextAnswers[quizIndex] = answer;
+    nextAnswers[quizIndex] = answerIds;
     setAnswers(nextAnswers);
     if (quizIndex === quizQuestions.length - 1) {
       setQuizLoading(true);
@@ -134,7 +137,7 @@ export default function Dashboard() {
           await submitQuiz(
             quizQuestions.map((question, questionIndex) => ({
               question_id: question.id,
-              answer_id: nextAnswers[questionIndex],
+              answer_ids: nextAnswers[questionIndex],
             })),
           ),
         );
@@ -155,7 +158,14 @@ export default function Dashboard() {
         <section className="w-full lg:ml-64">
           <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
             {tab === "home" && (
-              <HomePanel studentName={studentName} onTabChange={setTab} />
+              <HomePanel
+                studentName={studentName}
+                instructor={instructors.find((item) => item.id === assignedInstructorId)}
+                bookings={bookings}
+                lectureCount={lectures.length}
+                documentCount={documents.length}
+                onTabChange={setTab}
+              />
             )}
             {tab === "lessons" && (
               <LessonPanel
@@ -210,6 +220,7 @@ export default function Dashboard() {
                 error={documentsError}
               />
             )}
+            {tab === "assistant" && <AssistantPanel />}
           </div>
         </section>
       </div>

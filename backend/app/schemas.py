@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -80,6 +81,20 @@ class InstructorStudentUpdate(BaseModel):
 
 class StudentPasswordReset(BaseModel):
     password: str = Field(min_length=8)
+
+
+class AssistantChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    history: list["AssistantMessage"] = Field(default_factory=list, max_length=12)
+
+
+class AssistantMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class AssistantChatResponse(BaseModel):
+    reply: str
 
 
 class SchoolSettingsResponse(BaseModel):
@@ -186,12 +201,40 @@ class QuizAnswerResponse(BaseModel):
 class QuizQuestionResponse(BaseModel):
     id: int
     question_text: str
+    image_url: str | None = None
+    allow_multiple: bool = False
     answers: list[QuizAnswerResponse]
+
+
+class QuizAnswerManage(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    answer_text: str = Field(min_length=1, max_length=500)
+    is_correct: bool = False
+
+
+class QuizQuestionManageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    question_text: str
+    image_url: str | None
+    allow_multiple: bool
+    is_active: bool
+    answers: list[QuizAnswerManage]
+
+
+class QuizQuestionWrite(BaseModel):
+    question_text: str = Field(min_length=1, max_length=2000)
+    image_url: str | None = None
+    allow_multiple: bool = False
+    is_active: bool = True
+    answers: list[QuizAnswerManage] = Field(min_length=2, max_length=8)
 
 
 class QuizSubmissionAnswer(BaseModel):
     question_id: int
-    answer_id: int
+    answer_ids: list[int] = Field(min_length=1, max_length=8)
 
 
 class QuizSubmissionRequest(BaseModel):
@@ -201,8 +244,8 @@ class QuizSubmissionRequest(BaseModel):
 class QuizReviewItem(BaseModel):
     question_id: int
     question_text: str
-    selected_answer: str | None
-    correct_answer: str
+    selected_answers: list[str]
+    correct_answers: list[str]
     is_correct: bool
 
 

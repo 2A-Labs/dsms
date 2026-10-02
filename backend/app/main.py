@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI, OpenAIError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,8 @@ from app.database import Base, engine, get_db
 from app.models import Booking, Course, InstructorAvailability, QuizAnswer, QuizQuestion, SchoolSettings, StudentDocument, User, VideoInstruction
 from app.schemas import (
     AuthResponse,
+    AssistantChatRequest,
+    AssistantChatResponse,
     BookingCreate,
     BookingResponse,
     CourseResponse,
@@ -42,6 +45,10 @@ from app.schemas import (
     SetupRequest,
     SetupStatusResponse,
     QuizQuestionResponse,
+    QuizQuestionManageResponse,
+    QuizQuestionWrite,
+    QuizQuestionManageResponse,
+    QuizQuestionWrite,
     QuizSubmissionRequest,
     QuizSubmissionResponse,
     BookingStatusUpdate,
@@ -83,6 +90,9 @@ async def lifespan(_: FastAPI):
             session.commit()
         if session.scalar(select(SchoolSettings.id).limit(1)) is None:
             session.add(SchoolSettings())
+        session.execute(text("ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS image_url TEXT"))
+        session.execute(text("ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS allow_multiple BOOLEAN NOT NULL DEFAULT FALSE"))
+        session.execute(text("DROP INDEX IF EXISTS uq_quiz_answer_one_correct"))
         session.commit()
     yield
 
@@ -231,6 +241,8 @@ def get_quiz_questions(
         QuizQuestionResponse(
             id=question.id,
             question_text=question.question_text,
+            image_url=question.image_url,
+            allow_multiple=question.allow_multiple,
             answers=[
                 {"id": answer.id, "answer_text": answer.answer_text}
                 for answer in answers_by_question[question.id]
@@ -267,17 +279,23 @@ def submit_quiz(
         if question is None:
             raise HTTPException(status_code=400, detail="Quiz question not found")
         question_answers = answers_by_question[question.id]
-        selected = next((answer for answer in question_answers if answer.id == submitted.answer_id), None)
-        correct = next((answer for answer in question_answers if answer.is_correct), None)
-        if correct is None:
+        if len(submitted.answer_ids) > 1 and not question.allow_multiple:
+            raise HTTPException(status_code=400, detail="This question accepts one answer")
+        if len(submitted.answer_ids) != len(set(submitted.answer_ids)):
+            raise HTTPException(status_code=400, detail="Each answer can only be selected once")
+        selected = [answer for answer in question_answers if answer.id in submitted.answer_ids]
+        if len(selected) != len(submitted.answer_ids):
+            raise HTTPException(status_code=400, detail="Answer not found for this question")
+        correct = [answer for answer in question_answers if answer.is_correct]
+        if not correct:
             raise HTTPException(status_code=409, detail="Every question must have one correct answer")
         review.append(
             {
                 "question_id": question.id,
                 "question_text": question.question_text,
-                "selected_answer": selected.answer_text if selected else None,
-                "correct_answer": correct.answer_text,
-                "is_correct": selected is not None and selected.is_correct,
+                "selected_answers": [answer.answer_text for answer in selected],
+                "correct_answers": [answer.answer_text for answer in correct],
+                "is_correct": {answer.id for answer in selected} == {answer.id for answer in correct},
             }
         )
 
@@ -286,6 +304,104 @@ def submit_quiz(
         total=len(review),
         review=review,
     )
+
+
+@app.get("/api/quiz/manage/questions", response_model=list[QuizQuestionManageResponse])
+def list_manage_quiz_questions(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[QuizQuestionManageResponse]:
+    quiz_manager(authorization, db)
+    questions = db.scalars(select(QuizQuestion).order_by(QuizQuestion.id.desc()))
+    return [quiz_manage_response(question, db) for question in questions]
+
+
+def validate_quiz_answers(payload: QuizQuestionWrite) -> None:
+    correct_count = sum(answer.is_correct for answer in payload.answers)
+    if correct_count != 1 and not payload.allow_multiple:
+        raise HTTPException(status_code=400, detail="Single-answer questions need exactly one correct answer")
+    if payload.allow_multiple and correct_count < 2:
+        raise HTTPException(status_code=400, detail="Multiple-answer questions need at least two correct answers")
+
+
+@app.post("/api/quiz/manage/questions", response_model=QuizQuestionManageResponse, status_code=201)
+def create_manage_quiz_question(
+    payload: QuizQuestionWrite,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> QuizQuestionManageResponse:
+    quiz_manager(authorization, db)
+    validate_quiz_answers(payload)
+    question = QuizQuestion(
+        question_text=payload.question_text.strip(),
+        image_url=payload.image_url.strip() if payload.image_url else None,
+        allow_multiple=payload.allow_multiple,
+        is_active=payload.is_active,
+    )
+    db.add(question)
+    db.flush()
+    db.add_all(
+        [
+            QuizAnswer(
+                question_id=question.id,
+                answer_text=answer.answer_text.strip(),
+                is_correct=answer.is_correct,
+            )
+            for answer in payload.answers
+        ]
+    )
+    db.commit()
+    db.refresh(question)
+    return quiz_manage_response(question, db)
+
+
+@app.patch("/api/quiz/manage/questions/{question_id}", response_model=QuizQuestionManageResponse)
+def update_manage_quiz_question(
+    question_id: int,
+    payload: QuizQuestionWrite,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> QuizQuestionManageResponse:
+    quiz_manager(authorization, db)
+    question = db.scalar(select(QuizQuestion).where(QuizQuestion.id == question_id))
+    if question is None:
+        raise HTTPException(status_code=404, detail="Quiz question not found")
+    validate_quiz_answers(payload)
+    question.question_text = payload.question_text.strip()
+    question.image_url = payload.image_url.strip() if payload.image_url else None
+    question.allow_multiple = payload.allow_multiple
+    question.is_active = payload.is_active
+    for answer in list(db.scalars(select(QuizAnswer).where(QuizAnswer.question_id == question.id))):
+        db.delete(answer)
+    db.flush()
+    db.add_all(
+        [
+            QuizAnswer(
+                question_id=question.id,
+                answer_text=answer.answer_text.strip(),
+                is_correct=answer.is_correct,
+            )
+            for answer in payload.answers
+        ]
+    )
+    db.commit()
+    db.refresh(question)
+    return quiz_manage_response(question, db)
+
+
+@app.delete("/api/quiz/manage/questions/{question_id}", status_code=204)
+def delete_manage_quiz_question(
+    question_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    quiz_manager(authorization, db)
+    question = db.scalar(select(QuizQuestion).where(QuizQuestion.id == question_id))
+    if question is None:
+        raise HTTPException(status_code=404, detail="Quiz question not found")
+    for answer in list(db.scalars(select(QuizAnswer).where(QuizAnswer.question_id == question.id))):
+        db.delete(answer)
+    db.delete(question)
+    db.commit()
 
 
 def current_user(token: str, db: Session) -> User:
@@ -313,6 +429,34 @@ def instructor_user(authorization: str | None, db: Session) -> User:
     if user.role != "instructor":
         raise HTTPException(status_code=403, detail="Only instructors can manage lectures")
     return user
+
+
+def quiz_manager(authorization: str | None, db: Session) -> User:
+    user = authenticated_user(authorization, db)
+    if user.role not in {"admin", "instructor"}:
+        raise HTTPException(status_code=403, detail="Only admins and instructors can manage quizzes")
+    return user
+
+
+def quiz_manage_response(question: QuizQuestion, db: Session) -> QuizQuestionManageResponse:
+    answers = list(
+        db.scalars(
+            select(QuizAnswer)
+            .where(QuizAnswer.question_id == question.id)
+            .order_by(QuizAnswer.id)
+        )
+    )
+    return QuizQuestionManageResponse(
+        id=question.id,
+        question_text=question.question_text,
+        image_url=question.image_url,
+        allow_multiple=question.allow_multiple,
+        is_active=question.is_active,
+        answers=[
+            {"answer_text": answer.answer_text, "is_correct": answer.is_correct}
+            for answer in answers
+        ],
+    )
 
 
 def instructor_student(instructor: User, student_id: int, db: Session) -> User:
@@ -898,6 +1042,65 @@ def list_my_documents(
             .order_by(StudentDocument.created_at.desc())
         )
     )
+
+
+@app.post("/api/assistant/chat", response_model=AssistantChatResponse)
+def assistant_chat(
+    payload: AssistantChatRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AssistantChatResponse:
+    student = authenticated_user(authorization, db)
+    if student.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use the assistant")
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=503, detail="The AI assistant is not configured")
+
+    instructor_name = "your instructor"
+    document_titles: list[str] = []
+    if student.instructor_id is not None:
+        instructor = db.scalar(select(User).where(User.id == student.instructor_id))
+        if instructor is not None:
+            instructor_name = instructor.name
+        document_titles = list(
+            db.scalars(
+                select(StudentDocument.title)
+                .where(StudentDocument.instructor_id == student.instructor_id)
+                .order_by(StudentDocument.created_at.desc())
+                .limit(20)
+            )
+        )
+
+    materials = ", ".join(document_titles) if document_titles else "No documents have been published yet"
+    system_prompt = (
+        "You are Roadwise Assistant, a careful driving-school tutor. "
+        "Help students understand driving theory, lesson preparation, and safe practice. "
+        "Be concise, encouraging, and practical. Do not provide legal certainty when rules vary by location; "
+        "recommend checking the official local source or asking the instructor. "
+        f"The student's instructor is {instructor_name}. Their available document titles are: {materials}. "
+        "You only know the document titles, not the full document contents, so never pretend to quote an uploaded file."
+    )
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(
+        {"role": message.role, "content": message.content}
+        for message in payload.history[-10:]
+    )
+    messages.append({"role": "user", "content": payload.message})
+
+    try:
+        response = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
+            model=settings.openai_model,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=500,
+        )
+    except OpenAIError as error:
+        raise HTTPException(status_code=502, detail="The AI assistant is temporarily unavailable") from error
+
+    reply = response.choices[0].message.content if response.choices else None
+    if not reply:
+        raise HTTPException(status_code=502, detail="The AI assistant returned an empty response")
+    return AssistantChatResponse(reply=reply)
 
 
 @app.post("/api/bookings", response_model=BookingResponse, status_code=201)

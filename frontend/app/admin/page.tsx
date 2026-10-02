@@ -14,6 +14,7 @@ import {
   type AdminInstructor,
   type SchoolSettings,
 } from "../lib/api";
+import { QuizEditorPanel } from "../components/quiz/QuizEditorPanel";
 
 const defaultSettings: Omit<SchoolSettings, "id"> = {
   school_name: "Roadwise",
@@ -401,6 +402,9 @@ export default function AdminPage() {
               </button>
             </form>
           </section>
+        </div>
+        <div className="mt-6">
+          <QuizEditorPanel />
         </div>
         <section className="mt-6 rounded-lg border border-border bg-surface p-6">
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">

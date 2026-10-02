@@ -68,6 +68,12 @@ export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
           active={tab === "documents"}
           onClick={() => onTabChange("documents")}
         />
+        <NavItem
+          label="AI assistant"
+          icon="✦"
+          active={tab === "assistant"}
+          onClick={() => onTabChange("assistant")}
+        />
       </nav>
       <button
         className="mt-auto hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"
