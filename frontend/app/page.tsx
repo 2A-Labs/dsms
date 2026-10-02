@@ -17,12 +17,14 @@ import {
   getMyBookings,
   getMyLectures,
   getMyDocuments,
+  getQuizzes,
   getQuizQuestions,
   submitQuiz,
   type ApiInstructor,
   type ApiLecture,
   type ApiQuizQuestion,
   type ApiQuizSubmission,
+  type ApiQuiz,
 } from "./lib/api";
 import type { Tab } from "./components/dashboard/data/types";
 
@@ -37,6 +39,8 @@ export default function Dashboard() {
   const [requestSent, setRequestSent] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [quizQuestions, setQuizQuestions] = useState<ApiQuizQuestion[]>([]);
+  const [quizzes, setQuizzes] = useState<ApiQuiz[]>([]);
+  const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [answers, setAnswers] = useState<number[][]>([]);
   const [quizResult, setQuizResult] = useState<ApiQuizSubmission | null>(null);
@@ -58,20 +62,23 @@ export default function Dashboard() {
       getMyBookings(),
       getMyLectures(),
       getMyDocuments(),
+      getQuizzes(),
     ])
-      .then(([availableInstructors, user, bookings, availableLectures, availableDocuments]) => {
+      .then(([availableInstructors, user, bookings, availableLectures, availableDocuments, availableQuizzes]) => {
         setInstructors(availableInstructors);
         setStudentName(user.name);
         setBookings(bookings);
         setLectures(availableLectures);
         setDocuments(availableDocuments);
+        setQuizzes(availableQuizzes);
+        setSelectedQuizId(availableQuizzes[0]?.id ?? null);
         if (user.instructor_id !== null) {
           setAssignedInstructorId(user.instructor_id);
         }
         const latestBooking = bookings[0];
         if (latestBooking) {
           setSelectedSlot(latestBooking.slot);
-          setRequestSent(true);
+          setRequestSent(latestBooking.status !== "Declined");
           if (user.instructor_id === null) {
             setAssignedInstructorId(latestBooking.instructor_id);
           }
@@ -112,7 +119,8 @@ export default function Dashboard() {
     setQuizLoading(true);
     setQuizError("");
     try {
-      setQuizQuestions(await getQuizQuestions());
+      if (selectedQuizId === null) throw new Error("No quiz is available yet");
+      setQuizQuestions(await getQuizQuestions(selectedQuizId));
       setQuizIndex(0);
       setAnswers([]);
       setQuizResult(null);
@@ -191,20 +199,49 @@ export default function Dashboard() {
               />
             )}
             {tab === "quiz" && (
-              <QuizPanel
-                questions={quizQuestions}
-                index={quizIndex}
-                result={quizResult}
-                loading={quizLoading}
-                error={quizError}
-                onStart={startQuiz}
-                onAnswer={chooseAnswer}
-                onReset={() => {
-                  setQuizQuestions([]);
-                  setQuizResult(null);
-                  setQuizError("");
-                }}
-              />
+              <>
+                {quizQuestions.length === 0 && !quizResult && (
+                  <section className="mb-8">
+                    <div className="mb-4">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Knowledge checks</p>
+                      <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Choose a quiz</h1>
+                      <p className="mt-2 text-sm text-text-secondary">Select a quiz below, then start when you are ready.</p>
+                    </div>
+                    {quizzes.length ? (
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {quizzes.map((quiz) => (
+                          <button
+                            className={`min-h-44 rounded-lg border p-5 text-left transition ${selectedQuizId === quiz.id ? "border-primary bg-primary-light shadow-lg shadow-primary/10" : "border-border bg-surface hover:border-primary"}`}
+                            key={quiz.id}
+                            type="button"
+                            onClick={() => { setSelectedQuizId(quiz.id); setQuizError(""); }}
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">{quiz.question_count} questions</span>
+                            <h2 className="mt-4 font-display text-xl font-semibold">{quiz.name}</h2>
+                            <p className="mt-2 text-xs leading-5 text-text-secondary">{quiz.description || "No description added."}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-lg border border-border bg-surface p-6 text-sm text-text-secondary">No quizzes are available yet.</p>
+                    )}
+                  </section>
+                )}
+                <QuizPanel
+                  questions={quizQuestions}
+                  index={quizIndex}
+                  result={quizResult}
+                  loading={quizLoading}
+                  error={quizError}
+                  onStart={startQuiz}
+                  onAnswer={chooseAnswer}
+                  onReset={() => {
+                    setQuizQuestions([]);
+                    setQuizResult(null);
+                    setQuizError("");
+                  }}
+                />
+              </>
             )}
             {tab === "lectures" && (
               <LecturesPanel

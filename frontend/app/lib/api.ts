@@ -89,9 +89,18 @@ export type ApiQuizAnswer = {
   answer_text: string;
 };
 
+export type ApiQuiz = {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  question_count: number;
+};
+
 export type ApiQuizQuestion = {
   id: number;
   question_text: string;
+  quiz_id: number;
   image_url: string | null;
   allow_multiple: boolean;
   answers: ApiQuizAnswer[];
@@ -101,6 +110,7 @@ export type ApiQuizManageAnswer = ApiQuizAnswer & { is_correct: boolean };
 
 export type ApiQuizManageQuestion = {
   id: number;
+  quiz_id: number;
   question_text: string;
   image_url: string | null;
   allow_multiple: boolean;
@@ -382,8 +392,14 @@ export function createBooking(
   });
 }
 
-export function getQuizQuestions(): Promise<ApiQuizQuestion[]> {
-  return request<ApiQuizQuestion[]>("/api/quiz/questions");
+export function getQuizzes(): Promise<ApiQuiz[]> {
+  return request<ApiQuiz[]>("/api/quizzes");
+}
+
+export function getQuizQuestions(quizId?: number): Promise<ApiQuizQuestion[]> {
+  return request<ApiQuizQuestion[]>(
+    quizId ? `/api/quiz/questions?quiz_id=${quizId}` : "/api/quiz/questions",
+  );
 }
 
 export function submitQuiz(
@@ -399,7 +415,23 @@ export function getManageQuizQuestions(): Promise<ApiQuizManageQuestion[]> {
   return request<ApiQuizManageQuestion[]>("/api/quiz/manage/questions");
 }
 
+export function getManageQuizzes(): Promise<ApiQuiz[]> {
+  return request<ApiQuiz[]>("/api/quiz/manage/quizzes");
+}
+
+export function createManageQuiz(name: string, description: string): Promise<ApiQuiz> {
+  return request<ApiQuiz>("/api/quiz/manage/quizzes", {
+    method: "POST",
+    body: JSON.stringify({ name, description, is_active: true }),
+  });
+}
+
+export function deleteManageQuiz(id: number): Promise<void> {
+  return request<void>(`/api/quiz/manage/quizzes/${id}`, { method: "DELETE" });
+}
+
 export function createManageQuizQuestion(payload: {
+  quiz_id: number;
   question_text: string;
   image_url: string | null;
   allow_multiple: boolean;

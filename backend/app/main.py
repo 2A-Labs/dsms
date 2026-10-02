@@ -4,12 +4,13 @@ import hmac
 import json
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from threading import Lock
 from time import monotonic
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI, OpenAIError
 from sqlalchemy import func, select, text
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, InstructorAvailability, QuizAnswer, QuizQuestion, SchoolSettings, StudentDocument, User, VideoInstruction
+from app.models import Booking, Course, InstructorAvailability, Quiz, QuizAnswer, QuizQuestion, SchoolSettings, StudentDocument, User, VideoInstruction
 from app.schemas import (
     AuthResponse,
     AssistantChatRequest,
@@ -47,8 +48,8 @@ from app.schemas import (
     QuizQuestionResponse,
     QuizQuestionManageResponse,
     QuizQuestionWrite,
-    QuizQuestionManageResponse,
-    QuizQuestionWrite,
+    QuizResponse,
+    QuizWrite,
     QuizSubmissionRequest,
     QuizSubmissionResponse,
     BookingStatusUpdate,
@@ -92,7 +93,18 @@ async def lifespan(_: FastAPI):
             session.add(SchoolSettings())
         session.execute(text("ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS image_url TEXT"))
         session.execute(text("ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS allow_multiple BOOLEAN NOT NULL DEFAULT FALSE"))
+        session.execute(text("ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS quiz_id INTEGER REFERENCES quizzes(id)"))
+        session.execute(text("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS description VARCHAR(500)"))
         session.execute(text("DROP INDEX IF EXISTS uq_quiz_answer_one_correct"))
+        default_quiz = session.scalar(select(Quiz).order_by(Quiz.id).limit(1))
+        if default_quiz is None:
+            default_quiz = Quiz(name="General Quiz")
+            session.add(default_quiz)
+            session.flush()
+        session.execute(
+            text("UPDATE quiz_questions SET quiz_id = :quiz_id WHERE quiz_id IS NULL"),
+            {"quiz_id": default_quiz.id},
+        )
         session.commit()
     yield
 
@@ -210,22 +222,34 @@ def student_user(authorization: str | None, db: Session) -> User:
     return user
 
 
+@app.get("/api/quizzes", response_model=list[QuizResponse])
+def list_quizzes(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[Quiz]:
+    student_user(authorization, db)
+    quizzes = db.scalars(select(Quiz).where(Quiz.is_active.is_(True)).order_by(Quiz.name))
+    return [
+        quiz_response(quiz, db)
+        for quiz in quizzes
+        if db.scalar(
+            select(QuizQuestion.id)
+            .where(QuizQuestion.quiz_id == quiz.id, QuizQuestion.is_active.is_(True))
+            .limit(1)
+        )
+        is not None
+    ]
+
+
 @app.get("/api/quiz/questions", response_model=list[QuizQuestionResponse])
 def get_quiz_questions(
+    quiz_id: int | None = Query(default=None),
     authorization: str | None = Header(default=None), db: Session = Depends(get_db)
 ) -> list[QuizQuestionResponse]:
     student_user(authorization, db)
-    questions = list(
-        db.scalars(
-            select(QuizQuestion)
-            .where(QuizQuestion.is_active.is_(True))
-            .order_by(func.random())
-            .limit(20)
-        )
-    )
-    if len(questions) < 20:
-        raise HTTPException(status_code=409, detail="At least 20 active quiz questions are required")
-
+    question_query = select(QuizQuestion).where(QuizQuestion.is_active.is_(True))
+    if quiz_id is not None:
+        question_query = question_query.where(QuizQuestion.quiz_id == quiz_id)
+    questions = list(db.scalars(question_query.order_by(func.random()).limit(20)))
     question_ids = [question.id for question in questions]
     answers = list(
         db.scalars(
@@ -240,6 +264,7 @@ def get_quiz_questions(
     return [
         QuizQuestionResponse(
             id=question.id,
+            quiz_id=question.quiz_id,
             question_text=question.question_text,
             image_url=question.image_url,
             allow_multiple=question.allow_multiple,
@@ -306,6 +331,54 @@ def submit_quiz(
     )
 
 
+@app.get("/api/quiz/manage/quizzes", response_model=list[QuizResponse])
+def list_manage_quizzes(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[Quiz]:
+    quiz_manager(authorization, db)
+    return [quiz_response(quiz, db) for quiz in db.scalars(select(Quiz).order_by(Quiz.name))]
+
+
+@app.post("/api/quiz/manage/quizzes", response_model=QuizResponse, status_code=201)
+def create_manage_quiz(
+    payload: QuizWrite,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Quiz:
+    quiz_manager(authorization, db)
+    if db.scalar(select(Quiz.id).where(Quiz.name == payload.name.strip())) is not None:
+        raise HTTPException(status_code=409, detail="A quiz with that name already exists")
+    quiz = Quiz(
+        name=payload.name.strip(),
+        description=payload.description.strip() if payload.description else None,
+        is_active=payload.is_active,
+    )
+    db.add(quiz)
+    db.commit()
+    db.refresh(quiz)
+    return quiz_response(quiz, db)
+
+
+@app.delete("/api/quiz/manage/quizzes/{quiz_id}", status_code=204)
+def delete_manage_quiz(
+    quiz_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    quiz_manager(authorization, db)
+    quiz = db.scalar(select(Quiz).where(Quiz.id == quiz_id))
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    question_ids = list(db.scalars(select(QuizQuestion.id).where(QuizQuestion.quiz_id == quiz.id)))
+    if question_ids:
+        for answer in list(db.scalars(select(QuizAnswer).where(QuizAnswer.question_id.in_(question_ids)))):
+            db.delete(answer)
+        for question in list(db.scalars(select(QuizQuestion).where(QuizQuestion.id.in_(question_ids)))):
+            db.delete(question)
+    db.delete(quiz)
+    db.commit()
+
+
 @app.get("/api/quiz/manage/questions", response_model=list[QuizQuestionManageResponse])
 def list_manage_quiz_questions(
     authorization: str | None = Header(default=None), db: Session = Depends(get_db)
@@ -331,7 +404,11 @@ def create_manage_quiz_question(
 ) -> QuizQuestionManageResponse:
     quiz_manager(authorization, db)
     validate_quiz_answers(payload)
+    quiz = db.scalar(select(Quiz).where(Quiz.id == payload.quiz_id))
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Quiz not found")
     question = QuizQuestion(
+        quiz_id=quiz.id,
         question_text=payload.question_text.strip(),
         image_url=payload.image_url.strip() if payload.image_url else None,
         allow_multiple=payload.allow_multiple,
@@ -366,6 +443,10 @@ def update_manage_quiz_question(
     if question is None:
         raise HTTPException(status_code=404, detail="Quiz question not found")
     validate_quiz_answers(payload)
+    quiz = db.scalar(select(Quiz).where(Quiz.id == payload.quiz_id))
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    question.quiz_id = quiz.id
     question.question_text = payload.question_text.strip()
     question.image_url = payload.image_url.strip() if payload.image_url else None
     question.allow_multiple = payload.allow_multiple
@@ -438,6 +519,22 @@ def quiz_manager(authorization: str | None, db: Session) -> User:
     return user
 
 
+def quiz_response(quiz: Quiz, db: Session) -> QuizResponse:
+    question_count = db.scalar(
+        select(func.count(QuizQuestion.id)).where(
+            QuizQuestion.quiz_id == quiz.id,
+            QuizQuestion.is_active.is_(True),
+        )
+    )
+    return QuizResponse(
+        id=quiz.id,
+        name=quiz.name,
+        description=quiz.description,
+        is_active=quiz.is_active,
+        question_count=question_count or 0,
+    )
+
+
 def quiz_manage_response(question: QuizQuestion, db: Session) -> QuizQuestionManageResponse:
     answers = list(
         db.scalars(
@@ -448,6 +545,7 @@ def quiz_manage_response(question: QuizQuestion, db: Session) -> QuizQuestionMan
     )
     return QuizQuestionManageResponse(
         id=question.id,
+        quiz_id=question.quiz_id,
         question_text=question.question_text,
         image_url=question.image_url,
         allow_multiple=question.allow_multiple,
@@ -855,6 +953,8 @@ def delete_instructor_document(
 
 @app.get("/api/instructors", response_model=list[InstructorResponse])
 def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
+    now = datetime.now()
+    latest_visible_slot = now + timedelta(days=7)
     instructors = db.scalars(select(User).where(User.role == "instructor").order_by(User.id))
     result = []
     for instructor in instructors:
@@ -873,6 +973,15 @@ def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
                 )
             )
         )
+        visible_slots = []
+        for slot in availability:
+            try:
+                parsed_slot = datetime.strptime(slot, "%Y-%m-%d · %H:%M")
+            except ValueError:
+                continue
+            if now <= parsed_slot <= latest_visible_slot and slot not in booked_slots:
+                visible_slots.append((parsed_slot, slot))
+        visible_slots.sort(key=lambda item: item[0])
         result.append(
             InstructorResponse(
                 id=instructor.id,
@@ -880,7 +989,7 @@ def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
                 initials="".join(part[0] for part in instructor.name.split()),
                 school=instructor.school or "Roadwise Central",
                 location=instructor.location or "Northside",
-                slots=[slot for slot in availability if slot not in booked_slots],
+                slots=[slot for _, slot in visible_slots],
             )
         )
     return result

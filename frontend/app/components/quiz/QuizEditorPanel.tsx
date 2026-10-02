@@ -3,14 +3,19 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   createManageQuizQuestion,
+  createManageQuiz,
+  deleteManageQuiz,
   deleteManageQuizQuestion,
+  getManageQuizzes,
   getManageQuizQuestions,
   updateManageQuizQuestion,
   type ApiQuizManageQuestion,
+  type ApiQuiz,
 } from "../../lib/api";
 
 type Draft = {
   id?: number;
+  quiz_id: number;
   question_text: string;
   image_url: string;
   allow_multiple: boolean;
@@ -18,7 +23,8 @@ type Draft = {
   answers: { answer_text: string; is_correct: boolean }[];
 };
 
-const emptyDraft = (): Draft => ({
+const emptyDraft = (quizId = 0): Draft => ({
+  quiz_id: quizId,
   question_text: "",
   image_url: "",
   allow_multiple: false,
@@ -31,7 +37,9 @@ const emptyDraft = (): Draft => ({
 
 export function QuizEditorPanel() {
   const [questions, setQuestions] = useState<ApiQuizManageQuestion[]>([]);
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [quizzes, setQuizzes] = useState<ApiQuiz[]>([]);
+  const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,11 +48,43 @@ export function QuizEditorPanel() {
   async function loadQuestions() {
     setLoading(true);
     try {
-      setQuestions(await getManageQuizQuestions());
+      const [loadedQuizzes, loadedQuestions] = await Promise.all([
+        getManageQuizzes(),
+        getManageQuizQuestions(),
+      ]);
+      setQuizzes(loadedQuizzes);
+      setQuestions(loadedQuestions);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load quiz questions");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function addQuiz() {
+    const name = window.prompt("Quiz name")?.trim();
+    if (!name) return;
+    const description = window.prompt("Quiz description")?.trim() ?? "";
+    setError("");
+    try {
+      const quiz = await createManageQuiz(name, description);
+      setQuizzes((current) => [...current, quiz].sort((left, right) => left.name.localeCompare(right.name)));
+      setNotice("Quiz added.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to add quiz");
+    }
+  }
+
+  async function removeQuiz(quiz: ApiQuiz) {
+    if (!window.confirm(`Delete ${quiz.name} and all its questions?`)) return;
+    setError("");
+    try {
+      await deleteManageQuiz(quiz.id);
+      setQuizzes((current) => current.filter((item) => item.id !== quiz.id));
+      setQuestions((current) => current.filter((question) => question.quiz_id !== quiz.id));
+      setNotice("Quiz deleted.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to delete quiz");
     }
   }
 
@@ -91,6 +131,7 @@ export function QuizEditorPanel() {
     setSaving(true);
     try {
       const payload = {
+        quiz_id: draft.quiz_id,
         question_text: draft.question_text.trim(),
         image_url: draft.image_url.trim() || null,
         allow_multiple: draft.allow_multiple,
@@ -105,7 +146,7 @@ export function QuizEditorPanel() {
           ? current.map((question) => (question.id === saved.id ? saved : question))
           : [saved, ...current],
       );
-      setDraft(emptyDraft());
+      setDraft(emptyDraft(selectedQuizId ?? 0));
       setNotice(draft.id ? "Question updated." : "Question added.");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to save question");
@@ -120,23 +161,72 @@ export function QuizEditorPanel() {
     try {
       await deleteManageQuizQuestion(id);
       setQuestions((current) => current.filter((question) => question.id !== id));
-      if (draft.id === id) setDraft(emptyDraft());
+      if (draft.id === id) setDraft(emptyDraft(selectedQuizId ?? 0));
       setNotice("Question deleted.");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to delete question");
     }
   }
 
+  if (selectedQuizId === null) {
+    return (
+      <>
+        <div className="mb-8">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Quiz bank</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Choose a quiz</h1>
+          <p className="mt-2 max-w-2xl text-sm text-text-secondary">Open a quiz to manage its questions, or create a new quiz to get started.</p>
+        </div>
+        {(error || notice) && <p className={`mb-6 rounded-md p-4 text-xs font-bold ${error ? "bg-error/10 text-error" : "bg-success/10 text-success"}`}>{error || notice}</p>}
+        <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Your quizzes</h2>
+              <p className="mt-1 text-xs text-text-secondary">{loading ? "Loading..." : `${quizzes.length} quizzes`}</p>
+            </div>
+            <button className="rounded-md bg-primary px-4 py-3 text-xs font-bold text-white" type="button" onClick={addQuiz}>Add quiz</button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {quizzes.map((quiz) => (
+              <div className="flex min-h-48 flex-col justify-between rounded-lg border border-border bg-background p-5" key={quiz.id}>
+                <div><p className="font-display text-lg font-semibold">{quiz.name}</p><p className="mt-2 min-h-10 text-xs leading-5 text-text-secondary">{quiz.description || "No description added."}</p><p className="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-primary">{quiz.question_count} questions · {quiz.is_active ? "Active" : "Inactive"}</p></div>
+                <div className="mt-5 flex gap-3">
+                  <button className="flex-1 rounded-md border border-primary/30 px-3 py-2.5 text-xs font-bold text-primary" type="button" onClick={() => { setSelectedQuizId(quiz.id); setDraft(emptyDraft(quiz.id)); }}>Open quiz</button>
+                  <button className="rounded-md border border-error/30 px-3 py-2.5 text-xs font-bold text-error" type="button" onClick={() => removeQuiz(quiz)}>Delete</button>
+                </div>
+              </div>
+            ))}
+            {!loading && quizzes.length === 0 && <p className="text-sm text-text-secondary">No quizzes have been created yet.</p>}
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  const selectedQuiz = quizzes.find((quiz) => quiz.id === selectedQuizId);
+
   return (
     <>
       <div className="mb-8">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Quiz bank</p>
-        <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Edit quiz questions</h1>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{selectedQuiz?.name ?? "Edit quiz questions"}</h1>
+            <button
+              className="rounded-md border border-border px-4 py-2.5 text-xs font-bold text-text-secondary"
+              type="button"
+              onClick={() => { setSelectedQuizId(null); setDraft(emptyDraft()); }}
+            >
+              Back to quiz bank
+            </button>
+          </div>
         <p className="mt-2 max-w-2xl text-sm text-text-secondary">Create theory questions, add an optional image, and choose whether one or several answers are correct.</p>
       </div>
       {(error || notice) && <p className={`mb-6 rounded-md p-4 text-xs font-bold ${error ? "bg-error/10 text-error" : "bg-success/10 text-success"}`}>{error || notice}</p>}
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="font-display text-xl font-semibold">Questions</h2>
+            <button className="rounded-md border border-border px-3 py-2 text-xs font-bold text-text-secondary" type="button" onClick={() => { setSelectedQuizId(null); setDraft(emptyDraft()); }}>Back to quizzes</button>
+          </div>
           <h2 className="font-display text-xl font-semibold">{draft.id ? "Edit question" : "Add question"}</h2>
           <form className="mt-6 grid gap-4" onSubmit={saveQuestion}>
             <label className="grid gap-2 text-xs font-bold">
@@ -163,15 +253,15 @@ export function QuizEditorPanel() {
             </div>
             <div className="flex gap-3">
               <button className="rounded-md border border-border px-4 py-3 text-xs font-bold text-text-secondary" type="button" onClick={() => setDraft((current) => ({ ...current, answers: [...current.answers, { answer_text: "", is_correct: false }] }))}>Add answer</button>
-              <button className="rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-40" type="submit" disabled={saving || !draft.question_text.trim()}>{saving ? "Saving..." : draft.id ? "Save question" : "Add question"}</button>
+              <button className="rounded-md bg-primary px-4 py-3 text-xs font-bold text-white disabled:opacity-40" type="submit" disabled={saving || !draft.question_text.trim() || !draft.quiz_id}>{saving ? "Saving..." : draft.id ? "Save question" : "Add question"}</button>
               {draft.id && <button className="rounded-md border border-border px-4 py-3 text-xs font-bold text-text-secondary" type="button" onClick={() => setDraft(emptyDraft())}>Cancel</button>}
             </div>
           </form>
         </section>
         <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
-          <div className="mb-6 flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold">Question bank</h2><p className="mt-1 text-xs text-text-secondary">{loading ? "Loading..." : `${questions.length} questions`}</p></div></div>
+          <div className="mb-6 flex items-center justify-between gap-4"><div><h2 className="font-display text-xl font-semibold">Question bank</h2><p className="mt-1 text-xs text-text-secondary">{loading ? "Loading..." : `${questions.filter((question) => question.quiz_id === selectedQuizId).length} questions`}</p></div></div>
           <div className="grid gap-4">
-            {questions.map((question) => (
+            {questions.filter((question) => question.quiz_id === selectedQuizId).map((question) => (
               <article className="border-b border-border pb-4 last:border-0" key={question.id}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0"><p className="text-sm font-bold">{question.question_text}</p><p className="mt-1 text-xs text-text-secondary">{question.allow_multiple ? "Multiple answers" : "Single answer"} · {question.is_active ? "Active" : "Inactive"}</p></div>

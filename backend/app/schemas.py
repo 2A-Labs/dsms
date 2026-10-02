@@ -198,8 +198,23 @@ class QuizAnswerResponse(BaseModel):
     answer_text: str
 
 
+class QuizResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    is_active: bool
+    question_count: int = 0
+
+
+class QuizWrite(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    is_active: bool = True
+
+
 class QuizQuestionResponse(BaseModel):
     id: int
+    quiz_id: int
     question_text: str
     image_url: str | None = None
     allow_multiple: bool = False
@@ -217,6 +232,7 @@ class QuizQuestionManageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    quiz_id: int
     question_text: str
     image_url: str | None
     allow_multiple: bool
@@ -225,6 +241,7 @@ class QuizQuestionManageResponse(BaseModel):
 
 
 class QuizQuestionWrite(BaseModel):
+    quiz_id: int
     question_text: str = Field(min_length=1, max_length=2000)
     image_url: str | None = None
     allow_multiple: bool = False

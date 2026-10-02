@@ -98,7 +98,7 @@ export function LessonPanel({
           </div>
           {requestSent ? (
             <div className="mt-6 rounded-md bg-success/15 p-4 text-xs font-bold text-success">
-              Request sent. Jamie will review it soon.
+              Request sent. {instructor.name} will review it soon.
             </div>
           ) : (
             <>
