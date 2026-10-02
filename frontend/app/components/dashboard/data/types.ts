@@ -1,4 +1,4 @@
-export type Tab = "home" | "lessons" | "quiz" | "lectures";
+export type Tab = "home" | "lessons" | "quiz" | "lectures" | "documents";
 
 export type Instructor = {
   id: number;

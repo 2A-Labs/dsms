@@ -67,6 +67,18 @@ export function Sidebar({
           active={view === "lectures"}
           onClick={() => onViewChange("lectures")}
         />
+        <SidebarItem
+          icon="↓"
+          label="Documents"
+          active={view === "documents"}
+          onClick={() => onViewChange("documents")}
+        />
+        <SidebarItem
+          icon="◎"
+          label="Students"
+          active={view === "students"}
+          onClick={() => onViewChange("students")}
+        />
       </nav>
       <div className="mt-7 hidden rounded-md bg-primary-light p-4 lg:block">
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">

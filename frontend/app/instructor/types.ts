@@ -1,4 +1,4 @@
-export type View = "home" | "planner" | "lectures";
+export type View = "home" | "planner" | "lectures" | "documents" | "students";
 export type RequestStatus = "Requested" | "Booked" | "Declined";
 
 export type BookingRequest = {

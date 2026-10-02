@@ -16,15 +16,11 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000). The API is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-The backend seeds an admin account on first startup:
-
-- Email: `admin@roadwise.local`
-- Password: `Roadwise123!`
-
-Sign in with that account to open the `/admin` workspace. Admins can update the
-school name, logo mark, and color scheme, and are the only role allowed to add,
-edit, or remove instructor accounts. Students and instructors cannot use the
-admin API even if they call it directly.
+On first startup, the login screen opens a setup wizard where you create the
+administrator account. Use that account to open the `/admin` workspace. Admins
+can update the school name, logo mark, and color scheme, and are the only role
+allowed to add, edit, or remove instructor accounts. Students and instructors
+cannot use the admin API even if they call it directly.
 
 From the admin workspace, an admin can also log in as any instructor to review
 the instructor workspace. The instructor view includes a return link that

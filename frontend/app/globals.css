@@ -30,3 +30,114 @@
     font-family: "DM Sans", sans-serif;
   }
 }
+
+.login-abstract {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.42;
+}
+
+.login-abstract__lane {
+  position: absolute;
+  top: -12%;
+  right: -20%;
+  width: 82%;
+  height: 126%;
+  border: 1px solid rgb(224 231 255 / 35%);
+  border-radius: 48%;
+  transform: rotate(-18deg);
+}
+
+.login-abstract__lane::after {
+  position: absolute;
+  inset: 7% 8%;
+  border: 1px dashed rgb(224 231 255 / 40%);
+  border-radius: inherit;
+  content: "";
+}
+
+.login-abstract__route {
+  position: absolute;
+  right: 11%;
+  bottom: 13%;
+  width: 32%;
+  height: 23%;
+  border-right: 2px solid rgb(224 231 255 / 45%);
+  border-bottom: 2px solid rgb(224 231 255 / 45%);
+  border-radius: 0 0 65% 0;
+  transform: rotate(-24deg);
+}
+
+.login-abstract__route::after {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgb(224 231 255 / 65%);
+  border-radius: 50%;
+  content: "";
+}
+
+.login-abstract__wheel {
+  position: absolute;
+  right: 12%;
+  top: 16%;
+  width: 150px;
+  height: 150px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50%;
+  transform: rotate(20deg);
+}
+
+.login-abstract__wheel::before,
+.login-abstract__wheel::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 84%;
+  height: 1px;
+  background: rgb(255 255 255 / 18%);
+  content: "";
+  transform-origin: center;
+}
+
+.login-abstract__wheel::before {
+  transform: translate(-50%, -50%) rotate(60deg);
+}
+
+.login-abstract__wheel::after {
+  transform: translate(-50%, -50%) rotate(-60deg);
+}
+
+.login-abstract__sign {
+  position: absolute;
+  right: 36%;
+  bottom: 18%;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgb(224 231 255 / 48%);
+  transform: rotate(45deg);
+}
+
+.login-abstract__sign::after {
+  position: absolute;
+  top: 38px;
+  left: 20px;
+  width: 1px;
+  height: 86px;
+  background: rgb(224 231 255 / 42%);
+  content: "";
+  transform: rotate(-45deg);
+  transform-origin: top;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-abstract__lane,
+  .login-abstract__wheel,
+  .login-abstract__sign {
+    transform: none;
+  }
+}

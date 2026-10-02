@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { HomePanel } from "./components/dashboard/HomePanel";
 import { LecturesPanel } from "./components/dashboard/LecturesPanel";
+import { DocumentsPanel } from "./components/dashboard/DocumentsPanel";
 import { LessonPanel } from "./components/dashboard/LessonPanel";
 import { QuizPanel } from "./components/dashboard/QuizPanel";
 import { Sidebar } from "./components/dashboard/Sidebar";
@@ -14,6 +15,7 @@ import {
   getInstructors,
   getMyBookings,
   getMyLectures,
+  getMyDocuments,
   getQuizQuestions,
   submitQuiz,
   type ApiInstructor,
@@ -41,15 +43,25 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [studentName, setStudentName] = useState("");
   const [lectures, setLectures] = useState<ApiLecture[]>([]);
+  const [documents, setDocuments] = useState<import("./lib/api").ApiDocument[]>([]);
   const [lecturesLoading, setLecturesLoading] = useState(true);
   const [lecturesError, setLecturesError] = useState("");
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState("");
 
   useEffect(() => {
-    Promise.all([getInstructors(), getMe(), getMyBookings(), getMyLectures()])
-      .then(([availableInstructors, user, bookings, availableLectures]) => {
+    Promise.all([
+      getInstructors(),
+      getMe(),
+      getMyBookings(),
+      getMyLectures(),
+      getMyDocuments(),
+    ])
+      .then(([availableInstructors, user, bookings, availableLectures, availableDocuments]) => {
         setInstructors(availableInstructors);
         setStudentName(user.name);
         setLectures(availableLectures);
+        setDocuments(availableDocuments);
         if (user.instructor_id !== null) {
           setAssignedInstructorId(user.instructor_id);
         }
@@ -65,10 +77,12 @@ export default function Dashboard() {
       .catch(() => {
         setRequestError("We could not load your account details.");
         setLecturesError("We could not load your video lectures.");
+        setDocumentsError("We could not load your documents.");
       })
       .finally(() => {
         setLoading(false);
         setLecturesLoading(false);
+        setDocumentsLoading(false);
       });
   }, []);
 
@@ -187,6 +201,13 @@ export default function Dashboard() {
                 lectures={lectures}
                 loading={lecturesLoading}
                 error={lecturesError}
+              />
+            )}
+            {tab === "documents" && (
+              <DocumentsPanel
+                documents={documents}
+                loading={documentsLoading}
+                error={documentsError}
               />
             )}
           </div>

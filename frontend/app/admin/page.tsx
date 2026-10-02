@@ -94,6 +94,21 @@ export default function AdminPage() {
     reader.readAsDataURL(file);
   }
 
+  async function removeLogo() {
+    setNotice("");
+    setError("");
+    try {
+      setSettings(await saveSchoolSettings({ ...settings, logo_data: null }));
+      setNotice("Custom logo removed.");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to remove logo",
+      );
+    }
+  }
+
   async function addInstructor(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -420,6 +435,15 @@ export default function AdminPage() {
                   onChange={handleLogoUpload}
                 />
               </label>
+              {settings.logo_data && (
+                <button
+                  className="rounded-md border border-error/30 px-4 py-3 text-xs font-bold text-error"
+                  onClick={removeLogo}
+                  type="button"
+                >
+                  Remove logo
+                </button>
+              )}
             </div>
           </div>
         </section>

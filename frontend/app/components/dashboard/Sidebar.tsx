@@ -62,6 +62,12 @@ export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
           active={tab === "lectures"}
           onClick={() => onTabChange("lectures")}
         />
+        <NavItem
+          label="Documents"
+          icon="↓"
+          active={tab === "documents"}
+          onClick={() => onTabChange("documents")}
+        />
       </nav>
       <button
         className="mt-auto hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"

@@ -3,18 +3,27 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { HomePanel } from "./HomePanel";
-import { hours } from "./data";
+import { getPlannerDays, hours, isPlannerSlotPast } from "./data";
 import { LecturesPanel } from "./LecturesPanel";
+import { DocumentsPanel } from "./DocumentsPanel";
+import { StudentsPanel } from "./StudentsPanel";
 import { PlannerPanel } from "./PlannerPanel";
 import { Sidebar } from "./Sidebar";
 import type { BookingRequest, RequestStatus, View } from "./types";
+import type { PlannerDay } from "./data";
 import {
   clearSession,
+  createInstructorDocument,
   createInstructorLecture,
+  deleteInstructorDocument,
   deleteInstructorLecture,
+  getInstructorDocuments,
   getInstructorSchedule,
   getInstructorLectures,
+  getInstructorStudents,
   getMe,
+  resetStudentPassword,
+  updateInstructorStudent,
   updateInstructorAvailability,
   updateInstructorBooking,
 } from "../lib/api";
@@ -27,17 +36,26 @@ export default function InstructorPage() {
   const [bookable, setBookable] = useState<Set<string>>(new Set());
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [documents, setDocuments] = useState<import("../lib/api").ApiDocument[]>([]);
+  const [students, setStudents] = useState<import("../lib/api").ApiStudent[]>([]);
   const [instructorName, setInstructorName] = useState("Instructor");
   const [bookedHours, setBookedHours] = useState(0);
   const [scheduleError, setScheduleError] = useState("");
+  const [plannerDays] = useState(() => getPlannerDays());
   const requestedCount = requests.filter(
     (request) => request.status === "Requested",
   ).length;
 
   useEffect(() => {
     setIsImpersonating(Boolean(localStorage.getItem("roadwise_admin_token")));
-    Promise.all([getMe(), getInstructorSchedule(), getInstructorLectures()])
-      .then(([user, schedule, loadedLectures]) => {
+    Promise.all([
+      getMe(),
+      getInstructorSchedule(),
+      getInstructorLectures(),
+      getInstructorDocuments(),
+      getInstructorStudents(),
+    ])
+      .then(([user, schedule, loadedLectures, loadedDocuments, loadedStudents]) => {
         setInstructorName(user.name);
         setBookedHours(schedule.booked_hours);
         setBookable(
@@ -68,6 +86,8 @@ export default function InstructorPage() {
             fileUrl: lecture.file_url,
           })),
         );
+        setDocuments(loadedDocuments);
+        setStudents(loadedStudents);
       })
       .catch(() => setScheduleError("We could not load your instructor data."));
   }, []);
@@ -109,18 +129,21 @@ export default function InstructorPage() {
     }
   }
 
-  async function bookWholeDay(day: string) {
-    const slots = hours.filter((hour) => !bookable.has(`${day}-${hour}`));
+  async function bookWholeDay(day: PlannerDay) {
+    const slots = hours.filter(
+      (hour) =>
+        !isPlannerSlotPast(day.key, hour) && !bookable.has(`${day.key}-${hour}`),
+    );
     setScheduleError("");
     try {
       await Promise.all(
         slots.map((hour) =>
-          updateInstructorAvailability(`${day} · ${hour}`, true),
+          updateInstructorAvailability(`${day.key} · ${hour}`, true),
         ),
       );
       setBookable(
         (current) =>
-          new Set([...current, ...slots.map((hour) => `${day}-${hour}`)]),
+          new Set([...current, ...slots.map((hour) => `${day.key}-${hour}`)]),
       );
     } catch (error) {
       setScheduleError(
@@ -183,13 +206,14 @@ export default function InstructorPage() {
               />
             ) : view === "planner" ? (
               <PlannerPanel
+                days={plannerDays}
                 bookable={bookable}
                 requests={requests}
                 onToggle={toggleBookable}
                 onBookWholeDay={bookWholeDay}
                 onUpdateRequest={updateRequest}
               />
-            ) : (
+            ) : view === "lectures" ? (
               <LecturesPanel
                 lectures={lectures}
                 onAdd={async (title, file) => {
@@ -209,6 +233,33 @@ export default function InstructorPage() {
                   setLectures((current) =>
                     current.filter((lecture) => lecture.id !== id),
                   );
+                }}
+              />
+            ) : view === "documents" ? (
+              <DocumentsPanel
+                documents={documents}
+                onAdd={async (title, file) => {
+                  const document = await createInstructorDocument(title, file);
+                  setDocuments((current) => [document, ...current]);
+                }}
+                onRemove={async (id) => {
+                  await deleteInstructorDocument(id);
+                  setDocuments((current) =>
+                    current.filter((document) => document.id !== id),
+                  );
+                }}
+              />
+            ) : (
+              <StudentsPanel
+                students={students}
+                onUpdate={async (id, name, email) => {
+                  const student = await updateInstructorStudent(id, { name, email });
+                  setStudents((current) =>
+                    current.map((item) => (item.id === student.id ? student : item)),
+                  );
+                }}
+                onResetPassword={async (id, password) => {
+                  await resetStudentPassword(id, password);
                 }}
               />
             )}

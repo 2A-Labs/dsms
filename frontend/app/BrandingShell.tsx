@@ -33,7 +33,10 @@ export function BrandLogo({
   const settings = useBranding();
   return (
     <div className={className}>
-      <span className={markClassName}>
+      <span
+        className={markClassName}
+        style={settings.logo_data ? { backgroundColor: "transparent" } : undefined}
+      >
         {settings.logo_data ? (
           <img className="size-full object-contain" src={settings.logo_data} alt="" />
         ) : (

@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CourseResponse(BaseModel):
@@ -18,6 +20,21 @@ class Credentials(BaseModel):
 
 class SignUpRequest(Credentials):
     name: str
+
+
+class SetupRequest(SignUpRequest):
+    pass
+
+
+class SetupStatusResponse(BaseModel):
+    setup_required: bool
+
+
+class HeroImageResponse(BaseModel):
+    image_url: str
+    photographer_name: str
+    photographer_url: str
+    unsplash_url: str
 
 
 class UserResponse(BaseModel):
@@ -46,6 +63,23 @@ class InstructorUpdate(BaseModel):
     password: str | None = None
     school: str | None = None
     location: str | None = None
+
+
+class InstructorStudentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    email: str
+
+
+class InstructorStudentUpdate(BaseModel):
+    name: str
+    email: str
+
+
+class StudentPasswordReset(BaseModel):
+    password: str = Field(min_length=8)
 
 
 class SchoolSettingsResponse(BaseModel):
@@ -88,6 +122,18 @@ class LectureResponse(BaseModel):
     title: str
     file_url: str
     duration_seconds: int | None
+
+
+class StudentDocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    instructor_id: int
+    title: str
+    file_name: str
+    mime_type: str
+    file_url: str
+    created_at: datetime
 
 
 class BookingCreate(BaseModel):

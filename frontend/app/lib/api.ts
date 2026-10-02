@@ -54,6 +54,22 @@ export type ApiLecture = {
   duration_seconds: number | null;
 };
 
+export type ApiDocument = {
+  id: number;
+  instructor_id: number;
+  title: string;
+  file_name: string;
+  mime_type: string;
+  file_url: string;
+  created_at: string;
+};
+
+export type ApiStudent = {
+  id: number;
+  name: string;
+  email: string;
+};
+
 export type ApiInstructorBooking = {
   id: number;
   student_id: number;
@@ -95,6 +111,15 @@ export type ApiQuizSubmission = {
 
 type AuthResponse = { token: string; user: ApiUser };
 
+export type SetupStatus = { setup_required: boolean };
+
+export type HeroImage = {
+  image_url: string;
+  photographer_name: string;
+  photographer_url: string;
+  unsplash_url: string;
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token =
     typeof window === "undefined"
@@ -123,6 +148,25 @@ export async function authenticate(
   payload: Record<string, string>,
 ): Promise<AuthResponse> {
   return request<AuthResponse>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSetupStatus(): Promise<SetupStatus> {
+  return request<SetupStatus>("/api/setup/status");
+}
+
+export function getHeroImage(): Promise<HeroImage> {
+  return request<HeroImage>("/api/branding/hero-image");
+}
+
+export function setupApplication(payload: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<AuthResponse> {
+  return request<AuthResponse>("/api/setup", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -231,8 +275,55 @@ export function getMyLectures(): Promise<ApiLecture[]> {
   return request<ApiLecture[]>("/api/lectures");
 }
 
+export function getMyDocuments(): Promise<ApiDocument[]> {
+  return request<ApiDocument[]>("/api/documents");
+}
+
 export function getInstructorLectures(): Promise<ApiLecture[]> {
   return request<ApiLecture[]>("/api/instructor/lectures");
+}
+
+export function getInstructorDocuments(): Promise<ApiDocument[]> {
+  return request<ApiDocument[]>("/api/instructor/documents");
+}
+
+export function createInstructorDocument(
+  title: string,
+  file: File,
+): Promise<ApiDocument> {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("file", file);
+  return request<ApiDocument>("/api/instructor/documents", {
+    method: "POST",
+    body: formData,
+    headers: {},
+  });
+}
+
+export function deleteInstructorDocument(id: number): Promise<void> {
+  return request<void>(`/api/instructor/documents/${id}`, { method: "DELETE" });
+}
+
+export function getInstructorStudents(): Promise<ApiStudent[]> {
+  return request<ApiStudent[]>("/api/instructor/students");
+}
+
+export function updateInstructorStudent(
+  id: number,
+  payload: { name: string; email: string },
+): Promise<ApiStudent> {
+  return request<ApiStudent>(`/api/instructor/students/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetStudentPassword(id: number, password: string): Promise<void> {
+  return request<void>(`/api/instructor/students/${id}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ password }),
+  });
 }
 
 export function createInstructorLecture(

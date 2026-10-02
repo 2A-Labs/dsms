@@ -1,16 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { authenticate } from "../lib/api";
+import {
+  authenticate,
+  getHeroImage,
+  getSetupStatus,
+  setupApplication,
+  type HeroImage,
+} from "../lib/api";
 import { BrandLogo, useBranding } from "../BrandingShell";
 
 export default function Login() {
   const router = useRouter();
   const branding = useBranding();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
+  const [heroImage, setHeroImage] = useState<HeroImage | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const isSetup = setupRequired === true;
+  const showingSignUp = !isSetup && isSignUp;
+
+  useEffect(() => {
+    getSetupStatus()
+      .then(({ setup_required }) => setSetupRequired(setup_required))
+      .catch(() => setError("Unable to check the application setup status"));
+  }, []);
+
+  useEffect(() => {
+    getHeroImage()
+      .then(setHeroImage)
+      .catch(() => undefined);
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,10 +40,16 @@ export default function Login() {
     setSubmitting(true);
     const values = Object.fromEntries(new FormData(event.currentTarget));
     try {
-      const response = await authenticate(
-        isSignUp ? "/api/auth/signup" : "/api/auth/login",
-        values as Record<string, string>,
-      );
+      const response = isSetup
+        ? await setupApplication({
+            name: String(values.name ?? ""),
+            email: String(values.email ?? ""),
+            password: String(values.password ?? ""),
+          })
+        : await authenticate(
+            showingSignUp ? "/api/auth/signup" : "/api/auth/login",
+            values as Record<string, string>,
+          );
       localStorage.setItem("roadwise_token", response.token);
       document.cookie = `roadwise_session=${response.token}; path=/; max-age=86400; samesite=lax`;
       document.cookie = `roadwise_role=${response.user.role}; path=/; max-age=86400; samesite=lax`;
@@ -45,12 +73,25 @@ export default function Login() {
 
   return (
     <main className="grid min-h-screen bg-background font-sans text-text lg:grid-cols-[0.85fr_1.15fr]">
-      <section className="hidden bg-primary px-12 py-12 text-white lg:flex lg:flex-col lg:justify-between xl:px-20">
+      <section className="login-hero relative hidden overflow-hidden bg-primary px-12 py-12 text-white lg:flex lg:flex-col lg:justify-between xl:px-20">
+        {heroImage && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-0 bg-cover bg-center opacity-25 mix-blend-luminosity"
+            style={{ backgroundImage: `url(${heroImage.image_url})` }}
+          />
+        )}
+        <div className="login-abstract relative z-[1]" aria-hidden="true">
+          <span className="login-abstract__lane" />
+          <span className="login-abstract__route" />
+          <span className="login-abstract__wheel" />
+          <span className="login-abstract__sign" />
+        </div>
         <BrandLogo
-          className="flex items-center gap-2.5 font-display text-xl font-bold"
+          className="relative z-10 flex items-center gap-2.5 font-display text-xl font-bold"
           markClassName="grid size-8 place-items-center rounded-md bg-white p-1 text-sm text-primary"
         />
-        <div className="max-w-md">
+        <div className="relative z-10 max-w-md">
           <p className="mb-5 text-xs font-bold uppercase tracking-[0.2em] text-primary-light">
             One clear workspace
           </p>
@@ -62,9 +103,33 @@ export default function Login() {
             the day.
           </p>
         </div>
-        <p className="text-xs text-primary-light">
-          {branding.school_name} · Driving school operations
-        </p>
+        <div className="relative z-10">
+          <p className="text-xs text-primary-light">
+            {branding.school_name} · Driving school operations
+          </p>
+          {heroImage && (
+            <p className="mt-2 max-w-sm text-[10px] leading-4 text-primary-light/80">
+              Photo by{" "}
+              <a
+                className="underline decoration-primary-light/50 underline-offset-2"
+                href={heroImage.photographer_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {heroImage.photographer_name}
+              </a>{" "}
+              on{" "}
+              <a
+                className="underline decoration-primary-light/50 underline-offset-2"
+                href={heroImage.unsplash_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Unsplash
+              </a>
+            </p>
+          )}
+        </div>
       </section>
       <section className="flex items-center justify-center px-6 py-12 sm:px-12">
         <div className="w-full max-w-md">
@@ -74,14 +139,24 @@ export default function Login() {
           />
           <div className="mb-8">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
-              {isSignUp ? "New workspace" : "Welcome back"}
+              {isSetup
+                ? "First-time setup"
+                : showingSignUp
+                  ? "New workspace"
+                  : "Welcome back"}
             </p>
             <h1 className="font-display text-3xl font-semibold tracking-tight">
-              {isSignUp ? "Create your account" : "Sign in to continue"}
+              {isSetup
+                ? "Set up your administrator account"
+                : showingSignUp
+                  ? "Create your account"
+                  : "Sign in to continue"}
             </h1>
             <p className="mt-2 text-sm text-text-secondary">
-              {isSignUp
-                ? "Choose the workspace that fits your role."
+              {isSetup
+                ? "Create the account that will manage your school workspace."
+                : showingSignUp
+                  ? "Choose the workspace that fits your role."
                 : "Your school dashboard is waiting."}
             </p>
           </div>
@@ -91,7 +166,7 @@ export default function Login() {
             </p>
           )}
           <form className="grid gap-5" onSubmit={handleSubmit}>
-            {isSignUp && (
+            {(isSetup || showingSignUp) && (
               <label className="grid gap-2 text-xs font-bold">
                 Full name
                 <input
@@ -122,7 +197,7 @@ export default function Login() {
                 required
               />
             </label>
-            {!isSignUp && (
+            {!isSetup && !showingSignUp && (
               <button
                 className="-mt-2 justify-self-end cursor-pointer text-xs font-bold text-primary"
                 type="button"
@@ -133,27 +208,35 @@ export default function Login() {
             <button
               className="rounded-md cursor-pointer bg-primary px-4 py-3.5 text-xs font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-[#3730a3]"
               type="submit"
-              disabled={submitting}
+              disabled={submitting || setupRequired === null}
             >
-              {submitting
+              {setupRequired === null
+                ? "Checking setup..."
+                : submitting
                 ? "Connecting..."
-                : isSignUp
+                : showingSignUp
                   ? "Create account"
                   : "Sign in"}
             </button>
           </form>
-          <p className="mt-7 text-center text-xs text-text-secondary">
-            {isSignUp
-              ? "Already have an account?"
-              : `New to ${branding.school_name}?`}{" "}
-            <button
-              className="font-bold cursor-pointer text-primary"
-              type="button"
-              onClick={() => setIsSignUp((current) => !current)}
-            >
-              {isSignUp ? "Sign in" : "Create an account"}
-            </button>
-          </p>
+          {isSetup ? (
+            <p className="mt-7 text-center text-xs text-text-secondary">
+              After setup, you can add instructors from the admin workspace.
+            </p>
+          ) : (
+            <p className="mt-7 text-center text-xs text-text-secondary">
+              {showingSignUp
+                ? "Already have an account?"
+                : `New to ${branding.school_name}?`} {" "}
+              <button
+                className="font-bold cursor-pointer text-primary"
+                type="button"
+                onClick={() => setIsSignUp((current) => !current)}
+              >
+                {showingSignUp ? "Sign in" : "Create an account"}
+              </button>
+            </p>
+          )}
         </div>
       </section>
     </main>

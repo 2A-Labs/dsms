@@ -1,8 +1,13 @@
 import base64
 import hashlib
 import hmac
+import json
 import secrets
 from contextlib import asynccontextmanager
+from threading import Lock
+from time import monotonic
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Base, engine, get_db
-from app.models import Booking, Course, InstructorAvailability, QuizAnswer, QuizQuestion, SchoolSettings, User, VideoInstruction
+from app.models import Booking, Course, InstructorAvailability, QuizAnswer, QuizQuestion, SchoolSettings, StudentDocument, User, VideoInstruction
 from app.schemas import (
     AuthResponse,
     BookingCreate,
@@ -26,9 +31,16 @@ from app.schemas import (
     InstructorScheduleResponse,
     InstructorUpdate,
     LectureResponse,
+    HeroImageResponse,
+    InstructorStudentResponse,
+    InstructorStudentUpdate,
     SignUpRequest,
     SchoolSettingsResponse,
     SchoolSettingsUpdate,
+    StudentDocumentResponse,
+    StudentPasswordReset,
+    SetupRequest,
+    SetupStatusResponse,
     QuizQuestionResponse,
     QuizSubmissionRequest,
     QuizSubmissionResponse,
@@ -36,9 +48,11 @@ from app.schemas import (
     UserResponse,
 )
 
-DEFAULT_ADMIN_EMAIL = "admin@roadwise.local"
-DEFAULT_ADMIN_PASSWORD = "Roadwise123!"
 SETUP_REQUIRED_MESSAGE = "Please ask your administrator to set up the application"
+HERO_IMAGE_CACHE_SECONDS = 60
+hero_image_cache: HeroImageResponse | None = None
+hero_image_last_requested_at = 0.0
+hero_image_cache_lock = Lock()
 
 
 def hash_password(password: str) -> str:
@@ -67,15 +81,6 @@ async def lifespan(_: FastAPI):
                 ]
             )
             session.commit()
-        if session.scalar(select(User.id).where(User.email == DEFAULT_ADMIN_EMAIL)) is None:
-            session.add(
-                User(
-                    name="Roadwise Admin",
-                    email=DEFAULT_ADMIN_EMAIL,
-                    password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
-                    role="admin",
-                )
-            )
         if session.scalar(select(SchoolSettings.id).limit(1)) is None:
             session.add(SchoolSettings())
         session.commit()
@@ -102,6 +107,90 @@ def health(db: Session = Depends(get_db)) -> dict[str, str]:
 @app.get("/api/courses", response_model=list[CourseResponse])
 def list_courses(db: Session = Depends(get_db)) -> list[Course]:
     return list(db.scalars(select(Course).order_by(Course.id)))
+
+
+def fetch_unsplash_hero_image() -> HeroImageResponse:
+    access_key = settings.unsplash_access_key
+    if not access_key:
+        raise HTTPException(status_code=503, detail="Unsplash is not configured")
+
+    query = urlencode({"query": "driving lesson", "orientation": "landscape"})
+    request = Request(
+        f"https://api.unsplash.com/photos/random?{query}",
+        headers={"Authorization": f"Client-ID {access_key}"},
+    )
+    try:
+        with urlopen(request, timeout=5) as response:
+            photo = json.loads(response.read())
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=502, detail="Unable to load the Unsplash image") from error
+
+    user = photo.get("user", {})
+    links = photo.get("links", {})
+    photographer_name = user.get("name")
+    photographer_url = user.get("links", {}).get("html")
+    image_url = photo.get("urls", {}).get("regular")
+    unsplash_url = links.get("html")
+    if not all((photographer_name, photographer_url, image_url, unsplash_url)):
+        raise HTTPException(status_code=502, detail="Unsplash returned an incomplete image")
+    return HeroImageResponse(
+        image_url=image_url,
+        photographer_name=photographer_name,
+        photographer_url=photographer_url,
+        unsplash_url=unsplash_url,
+    )
+
+
+@app.get("/api/branding/hero-image", response_model=HeroImageResponse)
+def get_hero_image() -> HeroImageResponse:
+    global hero_image_cache, hero_image_last_requested_at
+
+    with hero_image_cache_lock:
+        now = monotonic()
+        if (
+            hero_image_cache is not None
+            and now - hero_image_last_requested_at < HERO_IMAGE_CACHE_SECONDS
+        ):
+            return hero_image_cache
+
+        cached_image = hero_image_cache
+        hero_image_last_requested_at = now
+        try:
+            hero_image_cache = fetch_unsplash_hero_image()
+        except HTTPException:
+            if cached_image is not None:
+                return cached_image
+            raise
+        return hero_image_cache
+
+
+@app.get("/api/setup/status", response_model=SetupStatusResponse)
+def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
+    return SetupStatusResponse(
+        setup_required=db.scalar(select(User.id).where(User.role == "admin")) is None
+    )
+
+
+@app.post("/api/setup", response_model=AuthResponse, status_code=201)
+def setup_application(payload: SetupRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    if db.scalar(select(User.id).where(User.role == "admin")) is not None:
+        raise HTTPException(status_code=409, detail="The application is already set up")
+
+    email = payload.email.strip().lower()
+    if db.scalar(select(User.id).where(User.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="An account with that email already exists")
+
+    admin = User(
+        name=payload.name.strip(),
+        email=email,
+        password_hash=hash_password(payload.password),
+        role="admin",
+        session_token=secrets.token_urlsafe(32),
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return AuthResponse(token=admin.session_token, user=admin)
 
 
 def student_user(authorization: str | None, db: Session) -> User:
@@ -224,6 +313,19 @@ def instructor_user(authorization: str | None, db: Session) -> User:
     if user.role != "instructor":
         raise HTTPException(status_code=403, detail="Only instructors can manage lectures")
     return user
+
+
+def instructor_student(instructor: User, student_id: int, db: Session) -> User:
+    student = db.scalar(
+        select(User).where(
+            User.id == student_id,
+            User.role == "student",
+            User.instructor_id == instructor.id,
+        )
+    )
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
 
 
 @app.post("/api/auth/signup", response_model=AuthResponse)
@@ -498,6 +600,115 @@ def delete_instructor_lecture(
     db.commit()
 
 
+@app.get("/api/instructor/students", response_model=list[InstructorStudentResponse])
+def list_instructor_students(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[User]:
+    instructor = instructor_user(authorization, db)
+    return list(
+        db.scalars(
+            select(User)
+            .where(User.role == "student", User.instructor_id == instructor.id)
+            .order_by(User.name)
+        )
+    )
+
+
+@app.patch("/api/instructor/students/{student_id}", response_model=InstructorStudentResponse)
+def update_instructor_student(
+    student_id: int,
+    payload: InstructorStudentUpdate,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    instructor = instructor_user(authorization, db)
+    student = instructor_student(instructor, student_id, db)
+    email = payload.email.strip().lower()
+    duplicate = db.scalar(select(User.id).where(User.email == email, User.id != student_id))
+    if duplicate is not None:
+        raise HTTPException(status_code=409, detail="An account with that email already exists")
+    student.name = payload.name.strip()
+    student.email = email
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@app.patch("/api/instructor/students/{student_id}/password", status_code=204)
+def reset_student_password(
+    student_id: int,
+    payload: StudentPasswordReset,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    instructor = instructor_user(authorization, db)
+    student = instructor_student(instructor, student_id, db)
+    student.password_hash = hash_password(payload.password)
+    student.session_token = None
+    db.commit()
+
+
+@app.get("/api/instructor/documents", response_model=list[StudentDocumentResponse])
+def list_instructor_documents(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[StudentDocument]:
+    instructor = instructor_user(authorization, db)
+    return list(
+        db.scalars(
+            select(StudentDocument)
+            .where(StudentDocument.instructor_id == instructor.id)
+            .order_by(StudentDocument.created_at.desc())
+        )
+    )
+
+
+@app.post("/api/instructor/documents", response_model=StudentDocumentResponse, status_code=201)
+async def create_instructor_document(
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> StudentDocument:
+    instructor = instructor_user(authorization, db)
+    if not file.content_type or file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Choose a document file, not a video")
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="The document file is empty")
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Document files must be smaller than 10 MB")
+    document = StudentDocument(
+        instructor_id=instructor.id,
+        title=title.strip(),
+        file_name=file.filename or "document",
+        mime_type=file.content_type,
+        file_url=f"data:{file.content_type};base64,{base64.b64encode(contents).decode('ascii')}",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@app.delete("/api/instructor/documents/{document_id}", status_code=204)
+def delete_instructor_document(
+    document_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    instructor = instructor_user(authorization, db)
+    document = db.scalar(
+        select(StudentDocument).where(
+            StudentDocument.id == document_id,
+            StudentDocument.instructor_id == instructor.id,
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(document)
+    db.commit()
+
+
 @app.get("/api/instructors", response_model=list[InstructorResponse])
 def list_instructors(db: Session = Depends(get_db)) -> list[InstructorResponse]:
     instructors = db.scalars(select(User).where(User.role == "instructor").order_by(User.id))
@@ -669,6 +880,24 @@ def list_my_lectures(
         )
         for lecture in lectures
     ]
+
+
+@app.get("/api/documents", response_model=list[StudentDocumentResponse])
+def list_my_documents(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> list[StudentDocument]:
+    student = authenticated_user(authorization, db)
+    if student.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view documents")
+    if student.instructor_id is None:
+        return []
+    return list(
+        db.scalars(
+            select(StudentDocument)
+            .where(StudentDocument.instructor_id == student.instructor_id)
+            .order_by(StudentDocument.created_at.desc())
+        )
+    )
 
 
 @app.post("/api/bookings", response_model=BookingResponse, status_code=201)

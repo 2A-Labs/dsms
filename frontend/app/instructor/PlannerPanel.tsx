@@ -1,18 +1,20 @@
 "use client";
 
 import { useRef } from "react";
-import { days, hours } from "./data";
+import { hours, isPlannerSlotPast, type PlannerDay } from "./data";
 import type { BookingRequest, RequestStatus } from "./types";
 
 type PlannerProps = {
+  days: PlannerDay[];
   bookable: Set<string>;
   requests: BookingRequest[];
   onToggle: (day: string, hour: string) => void;
-  onBookWholeDay: (day: string) => void;
+  onBookWholeDay: (day: PlannerDay) => void;
   onUpdateRequest: (id: number, status: RequestStatus) => void;
 };
 
 export function PlannerPanel({
+  days,
   bookable,
   requests,
   onToggle,
@@ -40,15 +42,15 @@ export function PlannerPanel({
           Availability management
         </p>
         <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-          Plan your week
+          Plan the next 15 days
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-text-secondary">
           Select one-hour blocks when students can request a lesson. Book or
           deny requests from the queue below.
         </p>
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1fr_330px]">
-        <section className="rounded-lg border border-border bg-surface p-5 sm:p-7">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_330px]">
+        <section className="min-w-0 rounded-lg border border-border bg-surface p-5 sm:p-7">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-display text-xl font-semibold">
@@ -78,7 +80,7 @@ export function PlannerPanel({
             </div>
           </div>
           <div
-            className="overflow-x-auto"
+            className="min-w-0 max-w-full overflow-x-auto"
             onPointerUp={() => {
               dragTarget.current = null;
             }}
@@ -86,17 +88,27 @@ export function PlannerPanel({
               dragTarget.current = null;
             }}
           >
-            <div className="min-w-180">
-              <div className="grid grid-cols-[64px_repeat(6,minmax(82px,1fr))] border-b border-border pb-3 text-center text-[10px] font-bold text-text-secondary">
+            <div className="min-w-[1320px]">
+              <div
+                className="grid border-b border-border pb-3 text-center text-[10px] font-bold text-text-secondary"
+                style={{
+                  gridTemplateColumns: `64px repeat(${days.length}, minmax(82px, 1fr))`,
+                }}
+              >
                 <span />
                 {days.map((day) => (
                   <button
-                    className="font-bold text-text-secondary transition hover:text-primary"
-                    key={day}
+                    className={`font-bold transition hover:text-primary ${day.isToday ? "text-primary" : "text-text-secondary"}`}
+                    key={day.key}
                     type="button"
                     onClick={() => onBookWholeDay(day)}
                   >
-                    {day}
+                    {day.label}
+                    {day.isToday && (
+                      <span className="mt-1 block text-[9px] uppercase tracking-[0.12em]">
+                        Today
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -105,6 +117,7 @@ export function PlannerPanel({
                   <PlannerRow
                     key={hour}
                     hour={hour}
+                    days={days}
                     bookable={bookable}
                     requests={requests}
                     onToggle={onToggle}
@@ -125,6 +138,7 @@ export function PlannerPanel({
 
 function PlannerRow({
   hour,
+  days,
   bookable,
   requests,
   onToggle,
@@ -133,6 +147,7 @@ function PlannerRow({
   suppressClick,
 }: {
   hour: string;
+  days: PlannerDay[];
   bookable: Set<string>;
   requests: BookingRequest[];
   onToggle: (day: string, hour: string) => void;
@@ -141,18 +156,24 @@ function PlannerRow({
   suppressClick: { current: boolean };
 }) {
   return (
-    <div className="grid grid-cols-[64px_repeat(6,minmax(82px,1fr))] items-center border-b border-border last:border-0">
+    <div
+      className="grid items-center border-b border-border last:border-0"
+      style={{
+        gridTemplateColumns: `64px repeat(${days.length}, minmax(82px, 1fr))`,
+      }}
+    >
       <time className="py-3 text-[11px] font-bold text-text-secondary">
         {hour}
       </time>
       {days.map((day) => (
         <PlannerCell
-          key={day}
-          day={day}
+          key={day.key}
+          day={day.key}
           hour={hour}
-          isOpen={bookable.has(`${day}-${hour}`)}
+          isPast={isPlannerSlotPast(day.key, hour)}
+          isOpen={bookable.has(`${day.key}-${hour}`)}
           request={requests.find(
-            (item) => item.day === day && item.time === hour,
+            (item) => item.day === day.key && item.time === hour,
           )}
           onToggle={onToggle}
           onPointerDown={onPointerDown}
@@ -167,6 +188,7 @@ function PlannerRow({
 function PlannerCell({
   day,
   hour,
+  isPast,
   isOpen,
   request,
   onToggle,
@@ -176,6 +198,7 @@ function PlannerCell({
 }: {
   day: string;
   hour: string;
+  isPast: boolean;
   isOpen: boolean;
   request?: BookingRequest;
   onToggle: (day: string, hour: string) => void;
@@ -185,11 +208,11 @@ function PlannerCell({
 }) {
   const isRequested = request?.status === "Requested";
   const isBooked = request?.status === "Booked";
-  const isLocked = isRequested || isBooked;
+  const isLocked = isPast || isRequested || isBooked;
 
   return (
     <button
-      className={`min-h-12 w-full border px-1 text-[10px] font-bold transition ${isBooked ? "cursor-not-allowed border-success bg-success/15 text-success" : isRequested ? "cursor-not-allowed border-warning bg-warning/15 text-warning" : isOpen ? "border-primary bg-primary-light text-primary hover:bg-primary hover:text-white" : "border-border bg-background text-text-secondary hover:border-primary"}`}
+      className={`min-h-12 w-full border px-1 text-[10px] font-bold transition ${isPast ? "cursor-not-allowed border-border bg-slate-100 text-slate-400" : isBooked ? "cursor-not-allowed border-success bg-success/15 text-success" : isRequested ? "cursor-not-allowed border-warning bg-warning/15 text-warning" : isOpen ? "border-primary bg-primary-light text-primary hover:bg-primary hover:text-white" : "border-border bg-background text-text-secondary hover:border-primary"}`}
       type="button"
       disabled={isLocked}
       onPointerDown={(event) => {
@@ -205,7 +228,9 @@ function PlannerCell({
         else onToggle(day, hour);
       }}
     >
-      {isRequested
+      {isPast
+        ? "Passed"
+        : isRequested
         ? "Requested"
         : isBooked
           ? "Booked"
