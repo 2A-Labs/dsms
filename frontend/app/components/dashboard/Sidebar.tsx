@@ -1,14 +1,21 @@
 import type { Tab } from "./data/types";
 import { BrandLogo } from "../../BrandingShell";
 import { clearSession } from "../../lib/api";
+import { Notifications, type NotificationItem } from "../Notifications";
 
 type SidebarProps = {
   tab: Tab;
   studentName: string;
   onTabChange: (tab: Tab) => void;
+  notifications: NotificationItem[];
 };
 
-export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
+export function Sidebar({
+  tab,
+  studentName,
+  onTabChange,
+  notifications,
+}: SidebarProps) {
   const initials = studentName
     .split(" ")
     .filter(Boolean)
@@ -32,6 +39,9 @@ export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
         <div>
           <p className="text-xs font-bold">{studentName}</p>
           <p className="mt-0.5 text-[11px] text-text-secondary">Student</p>
+        </div>
+        <div className="ml-auto">
+          <Notifications items={notifications} />
         </div>
       </div>
       <p className="mb-3 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-text-secondary">
@@ -76,7 +86,7 @@ export function Sidebar({ tab, studentName, onTabChange }: SidebarProps) {
         />
       </nav>
       <button
-        className="mt-auto hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"
+        className="mt-auto cursor-pointer hidden border-t border-border pt-5 text-xs font-bold text-text-secondary lg:block"
         onClick={() => {
           clearSession();
           window.location.href = "/login";

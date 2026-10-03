@@ -1,5 +1,9 @@
 import type { View } from "./types";
 import { BrandLogo } from "../BrandingShell";
+import {
+  Notifications,
+  type NotificationItem,
+} from "../components/Notifications";
 
 type SidebarProps = {
   view: View;
@@ -10,6 +14,7 @@ type SidebarProps = {
   onViewChange: (view: View) => void;
   onReturnToAdmin?: () => void;
   onSignOut: () => void;
+  notifications: NotificationItem[];
 };
 
 export function Sidebar({
@@ -21,6 +26,7 @@ export function Sidebar({
   onViewChange,
   onReturnToAdmin,
   onSignOut,
+  notifications,
 }: SidebarProps) {
   return (
     <aside className="w-full border-b border-border bg-surface px-5 py-5 lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
@@ -42,6 +48,9 @@ export function Sidebar({
         <div>
           <p className="text-xs font-bold">{instructorName}</p>
           <p className="mt-0.5 text-[11px] text-text-secondary">Instructor</p>
+        </div>
+        <div className="ml-auto">
+          <Notifications items={notifications} />
         </div>
       </div>
       <p className="mb-3 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-text-secondary">
@@ -109,7 +118,7 @@ export function Sidebar({
         </button>
       )}
       <button
-        className="mt-auto hidden border-t border-border pt-5 text-left text-xs font-bold text-text-secondary lg:block"
+        className="mt-auto hidden text-center cursor-pointer border-t border-border py-2 text-xs font-bold text-text-secondary lg:block"
         onClick={onSignOut}
         type="button"
       >

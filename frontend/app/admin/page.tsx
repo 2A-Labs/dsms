@@ -209,7 +209,7 @@ export default function AdminPage() {
             </p>
           </div>
           <button
-            className="rounded-md border border-border bg-surface px-4 py-2.5 text-xs font-bold text-text-secondary"
+            className="rounded-md border cursor-pointer border-border bg-surface px-4 py-2.5 text-xs font-bold text-text-secondary"
             onClick={signOut}
             type="button"
           >

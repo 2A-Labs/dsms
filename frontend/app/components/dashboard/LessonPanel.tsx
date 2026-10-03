@@ -6,7 +6,7 @@ type LessonPanelProps = {
   instructors: Instructor[];
   instructorId: number;
   selectedSlot: string;
-  requestSent: boolean;
+  requestStatus: "Requested" | "Booked" | "Declined" | null;
   requestError: string;
   onSlotChange: (slot: string) => void;
   onRequest: () => void;
@@ -16,7 +16,7 @@ export function LessonPanel({
   instructors,
   instructorId,
   selectedSlot,
-  requestSent,
+  requestStatus,
   requestError,
   onSlotChange,
   onRequest,
@@ -83,8 +83,11 @@ export function LessonPanel({
             Practical driving lesson
           </h2>
           <p className="mt-2 text-xs leading-5 text-text-secondary">
-            Your instructor will approve or decline this request. You will see
-            the confirmed time on your overview.
+            {requestStatus === "Booked"
+              ? "Your instructor accepted this lesson. The time is confirmed."
+              : requestStatus === "Declined"
+                ? "This request was declined. Choose another available time to try again."
+                : "Your instructor will approve or decline this request. You will see the confirmed time on your overview."}
           </p>
           <div className="mt-6 border-y border-border py-4 text-xs">
             <div className="flex justify-between">
@@ -96,8 +99,12 @@ export function LessonPanel({
               <strong>{selectedSlot || "Choose a time"}</strong>
             </div>
           </div>
-          {requestSent ? (
+          {requestStatus === "Booked" ? (
             <div className="mt-6 rounded-md bg-success/15 p-4 text-xs font-bold text-success">
+              Booking confirmed. Your lesson with {instructor.name} is booked.
+            </div>
+          ) : requestStatus === "Requested" ? (
+            <div className="mt-6 rounded-md bg-primary-light p-4 text-xs font-bold text-primary">
               Request sent. {instructor.name} will review it soon.
             </div>
           ) : (

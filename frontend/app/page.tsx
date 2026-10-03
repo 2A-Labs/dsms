@@ -27,6 +27,7 @@ import {
   type ApiQuiz,
 } from "./lib/api";
 import type { Tab } from "./components/dashboard/data/types";
+import type { NotificationItem } from "./components/Notifications";
 
 export default function Dashboard() {
   const [instructors, setInstructors] = useState<ApiInstructor[]>([]);
@@ -36,7 +37,9 @@ export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("home");
   const [selectedSlot, setSelectedSlot] = useState("");
   const [bookings, setBookings] = useState<import("./lib/api").ApiBooking[]>([]);
-  const [requestSent, setRequestSent] = useState(false);
+  const [requestStatus, setRequestStatus] = useState<
+    "Requested" | "Booked" | "Declined" | null
+  >(null);
   const [requestError, setRequestError] = useState("");
   const [quizQuestions, setQuizQuestions] = useState<ApiQuizQuestion[]>([]);
   const [quizzes, setQuizzes] = useState<ApiQuiz[]>([]);
@@ -78,7 +81,7 @@ export default function Dashboard() {
         const latestBooking = bookings[0];
         if (latestBooking) {
           setSelectedSlot(latestBooking.slot);
-          setRequestSent(latestBooking.status !== "Declined");
+          setRequestStatus(toBookingStatus(latestBooking.status));
           if (user.instructor_id === null) {
             setAssignedInstructorId(latestBooking.instructor_id);
           }
@@ -95,6 +98,48 @@ export default function Dashboard() {
         setDocumentsLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    const refreshBookings = () => {
+      getMyBookings()
+        .then((latestBookings) => {
+          setBookings(latestBookings);
+          const latestBooking = latestBookings[0];
+          if (latestBooking) {
+            setSelectedSlot(latestBooking.slot);
+            setRequestStatus(toBookingStatus(latestBooking.status));
+          }
+        })
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refreshBookings, 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const notifications: NotificationItem[] = bookings
+    .slice(0, 5)
+    .map((booking) => ({
+      id: `booking-${booking.id}`,
+      title:
+        booking.status === "Booked"
+          ? "Lesson confirmed"
+          : booking.status === "Declined"
+            ? "Booking request declined"
+            : "Booking request sent",
+      detail: `${formatSlot(booking.slot)} · ${
+        booking.status === "Booked"
+          ? "Your instructor accepted the lesson."
+          : booking.status === "Declined"
+            ? "Choose another available time to request a lesson."
+            : "Waiting for your instructor to review it."
+      }`,
+      tone:
+        booking.status === "Booked"
+          ? "success"
+          : booking.status === "Declined"
+            ? "error"
+            : "primary",
+    }));
 
   if (assignedInstructorId === null) {
     if (loading) {
@@ -162,7 +207,12 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-background font-sans text-text">
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <Sidebar tab={tab} studentName={studentName} onTabChange={setTab} />
+        <Sidebar
+          tab={tab}
+          studentName={studentName}
+          onTabChange={setTab}
+          notifications={notifications}
+        />
         <section className="w-full lg:ml-64">
           <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
             {tab === "home" && (
@@ -180,14 +230,18 @@ export default function Dashboard() {
                 instructors={instructors}
                 instructorId={assignedInstructorId}
                 selectedSlot={selectedSlot}
-                requestSent={requestSent}
+                requestStatus={requestStatus}
                 requestError={requestError}
                 onSlotChange={setSelectedSlot}
                 onRequest={async () => {
                   setRequestError("");
                   try {
-                    await createBooking(assignedInstructorId, selectedSlot);
-                    setRequestSent(true);
+                    const booking = await createBooking(
+                      assignedInstructorId,
+                      selectedSlot,
+                    );
+                    setBookings((current) => [booking, ...current]);
+                    setRequestStatus(toBookingStatus(booking.status));
                   } catch (error) {
                     setRequestError(
                       error instanceof Error
@@ -263,4 +317,16 @@ export default function Dashboard() {
       </div>
     </main>
   );
+}
+
+function toBookingStatus(
+  status: string,
+): "Requested" | "Booked" | "Declined" | null {
+  return status === "Requested" || status === "Booked" || status === "Declined"
+    ? status
+    : null;
+}
+
+function formatSlot(slot: string): string {
+  return slot.replace(" · ", " at ");
 }

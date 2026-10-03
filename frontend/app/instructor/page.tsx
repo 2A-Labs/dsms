@@ -29,6 +29,7 @@ import {
   updateInstructorBooking,
 } from "../lib/api";
 import type { Lecture } from "./types";
+import type { NotificationItem } from "../components/Notifications";
 
 export default function InstructorPage() {
   const router = useRouter();
@@ -46,6 +47,24 @@ export default function InstructorPage() {
   const requestedCount = requests.filter(
     (request) => request.status === "Requested",
   ).length;
+  const notifications: NotificationItem[] = requests
+    .slice()
+    .sort((left, right) => right.id - left.id)
+    .slice(0, 5)
+    .map((request) => ({
+      id: `request-${request.id}`,
+      title:
+        request.status === "Requested"
+          ? "New lesson request"
+          : `Request ${request.status.toLowerCase()}`,
+      detail: `${request.student} · ${request.day} at ${request.time}`,
+      tone:
+        request.status === "Booked"
+          ? "success"
+          : request.status === "Declined"
+            ? "error"
+            : "warning",
+    }));
 
   useEffect(() => {
     setIsImpersonating(Boolean(localStorage.getItem("roadwise_admin_token")));
@@ -91,6 +110,36 @@ export default function InstructorPage() {
         setStudents(loadedStudents);
       })
       .catch(() => setScheduleError("We could not load your instructor data."));
+  }, []);
+
+  useEffect(() => {
+    const refreshSchedule = () => {
+      getInstructorSchedule()
+        .then((schedule) => {
+          setBookedHours(schedule.booked_hours);
+          setBookable(
+            new Set(
+              schedule.bookable_slots.map((slot) => slot.replace(" · ", "-")),
+            ),
+          );
+          setRequests(
+            schedule.bookings.map((booking) => {
+              const [day, time] = booking.slot.split(" · ");
+              return {
+                id: booking.id,
+                student: booking.student_name,
+                day,
+                time,
+                detail: "Practical driving lesson",
+                status: booking.status,
+              };
+            }),
+          );
+        })
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refreshSchedule, 15000);
+    return () => window.clearInterval(interval);
   }, []);
 
   function returnToAdmin() {
@@ -192,6 +241,7 @@ export default function InstructorPage() {
           onViewChange={setView}
           onReturnToAdmin={isImpersonating ? returnToAdmin : undefined}
           onSignOut={signOut}
+          notifications={notifications}
         />
         <section className="w-full lg:ml-64">
           <div className="mx-auto max-w-350 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">

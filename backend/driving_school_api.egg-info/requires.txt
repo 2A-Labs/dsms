@@ -1,7 +1,0 @@
-fastapi<1.0,>=0.115
-python-multipart<1.0,>=0.0.9
-uvicorn[standard]<1.0,>=0.30
-sqlalchemy<3.0,>=2.0
-psycopg[binary]<4.0,>=3.2
-pydantic-settings<3.0,>=2.6
-openai<2.0,>=1.0
